@@ -25,6 +25,7 @@ import {
   prepareDenuePoisForProject,
 } from "@/utils/institutionalStructuredPersistence";
 import { composeCrimeIncidenceProductionWorkspace } from "@/utils/crimeIncidenceProductionComposition";
+import { regenerateIsolatedCrimeIncidenceSnapshot } from "@/services/crimeIncidenceSnapshotRegenerationService";
 import { enrichInstitutionalPayloadWithCrimeIncidenceVisuals } from "@/utils/crimeIncidenceInstitutionalPayloadBridge";
 
 import { CifaCeipolPanel } from "./CifaCeipolPanel";
@@ -829,6 +830,9 @@ export function PhotoAlbum({
   const [activeDelitos, setActiveDelitos] = useState<string[]>(DELITOS_CATEGORIES.map(d => d.id));
   const [incidents, setIncidents] = useState<any[]>([]);
   const [isCheckingIncidencia, setIsCheckingIncidencia] = useState(false);
+  const incidenceRegenerationInFlight = useRef(false);
+  const [isRegeneratingIncidence, setIsRegeneratingIncidence] = useState(false);
+  const [incidenceRegenerationResult, setIncidenceRegenerationResult] = useState<string | null>(null);
   const [delitoText, setDelitoText] = useState("");
 
   useEffect(() => {
@@ -3685,6 +3689,30 @@ const hasMinimumPhotos =
             Filtre los delitos y visualice gráficas de severidad basadas en la base local georreferenciada.
           </p>
         </header>
+        <CEIPOLButton
+          variant="primary"
+          loading={isRegeneratingIncidence}
+          disabled={!project?.id || isReadOnly || isRegeneratingIncidence || isCheckingIncidencia}
+          onClick={async () => {
+            if (!project?.id || isReadOnly || incidenceRegenerationInFlight.current || isCheckingIncidencia) return;
+            incidenceRegenerationInFlight.current = true;
+            try {
+              if (!confirm("Se reemplazará el resumen institucional de incidencia vigente. ¿Desea continuar?")) return;
+              if (!confirm("Se realizará una nueva consulta con la geografía actual. El resumen histórico no será reconstruido. ¿Confirma esta nueva generación?")) return;
+              if (!confirm("Los incidentes, barridos y evidencias permanecerán intactos. ¿Autoriza reemplazar únicamente el resumen institucional de incidencia?")) return;
+              setIsRegeneratingIncidence(true);
+              setIncidenceRegenerationResult(null);
+              const result = await regenerateIsolatedCrimeIncidenceSnapshot(project.id);
+              setIncidenceRegenerationResult(result.code);
+            } finally {
+              incidenceRegenerationInFlight.current = false;
+              setIsRegeneratingIncidence(false);
+            }
+          }}
+        >
+          Regenerar snapshot institucional de Incidencia
+        </CEIPOLButton>
+        {incidenceRegenerationResult && <p role="status" className="text-xs text-slate-300">{incidenceRegenerationResult}</p>}
         {/* INCIDENCIA DELICTIVA DATA CHECK REMOVED */}
         
         <div className="space-y-4 w-full">
@@ -3762,8 +3790,9 @@ const hasMinimumPhotos =
             <CEIPOLButton
               variant="primary"
               loading={isCheckingIncidencia}
-              disabled={isReadOnly || project?.canonicalGeography?.validationStatus !== "VALID"}
+              disabled={isReadOnly || isRegeneratingIncidence || project?.canonicalGeography?.validationStatus !== "VALID"}
               onClick={async () => {
+                if (incidenceRegenerationInFlight.current) return;
                 let canonicalSpatialQuery;
                 try {
                   canonicalSpatialQuery = buildExpedientIncidenceCanonicalSpatialQuery({
