@@ -9,7 +9,9 @@ import { prepareCrimeIncidenceContractForProject } from "@/utils/institutionalSt
 
 const failureCodes = ["SESSION_REQUIRED", "READ_DENIED", "WRITE_DENIED", "PROJECT_UNAVAILABLE",
   "GEOGRAPHY_INVALID", "GEOGRAPHY_CHANGED", "QUERY_FAILED", "DATASET_REJECTED", "LINEAGE_INVALID",
-  "CONTRACT_INVALID", "WRITE_FAILED", "VERIFY_FAILED"] as const;
+  "CONTRACT_INVALID", "WRITE_FAILED", "VERIFY_FAILED", "DATASET_IDENTITY_UNAVAILABLE",
+  "DATASET_INCOMPLETE_PROVENANCE", "DATASET_FAILED_VALIDATION", "DATASET_OUT_OF_SCOPE",
+  "DATASET_PENDING_REVIEW", "DATASET_REJECTED_BY_REVIEW"] as const;
 type Failure = typeof failureCodes[number];
 export type CrimeIncidenceRegenerationResult =
   | { ok: true; code: "CRIME_INCIDENCE_SNAPSHOT_REGENERATION_OK" }
@@ -67,6 +69,14 @@ export async function regenerateIsolatedCrimeIncidenceSnapshot(projectId: string
       requestedBy: actor.uid,
     });
     if (!binding.viewModel) {
+      switch (binding.error) {
+        case "CRIME_INCIDENCE_DATASET_IDENTITY_UNAVAILABLE": fail("DATASET_IDENTITY_UNAVAILABLE");
+        case "CRIME_INCIDENCE_DATASET_NOT_ADMITTED:INCOMPLETE_PROVENANCE": fail("DATASET_INCOMPLETE_PROVENANCE");
+        case "CRIME_INCIDENCE_DATASET_NOT_ADMITTED:FAILED_VALIDATION": fail("DATASET_FAILED_VALIDATION");
+        case "CRIME_INCIDENCE_DATASET_NOT_ADMITTED:OUT_OF_SCOPE": fail("DATASET_OUT_OF_SCOPE");
+        case "CRIME_INCIDENCE_DATASET_NOT_ADMITTED:PENDING_REVIEW": fail("DATASET_PENDING_REVIEW");
+        case "CRIME_INCIDENCE_DATASET_NOT_ADMITTED:REJECTED": fail("DATASET_REJECTED_BY_REVIEW");
+      }
       if (binding.error?.startsWith("CRIME_INCIDENCE_DATASET_")) fail("DATASET_REJECTED");
       fail("QUERY_FAILED");
     }
