@@ -493,6 +493,25 @@ Los ADR cerrados no se reabren por preferencia de implementación. Sólo pueden 
 | Observaciones | Rector vigente de incidencia; no tocar cambios actuales. |
 
 
+### ADR-022.31 — Contrato de Corpus de Incidencia y Provenance Multi-Dataset
+
+| ID | ADR-022.31 |
+| --- | --- |
+| Documento | Contrato de Corpus de Incidencia y Provenance Multi-Dataset |
+| Ruta | docs/ADR-022.31-crime-incidence-corpus-provenance.md |
+| Tipo | ADR/subfase de extensión |
+| Versión | 1.0 |
+| Estado | DECISIÓN_APROBADA_IMPLEMENTACIÓN_PENDIENTE |
+| Área regulada | Corpus de incidencia, provenance multi-dataset, membership, temporalidad y admisión |
+| ADR padre | ADR-022 |
+| Implementado | No |
+| Certificado | PENDING |
+| Commit | Pendiente |
+| Tag/Release | N/A |
+| Sustituye a | N/A; preserva ADR-022.8K singular |
+| Sustituido por | N/A |
+| Observaciones | Identificador por HUMAN_GOVERNANCE_DECISION; certificación nueva posterior a implementación y validación. |
+
 ### ADR-023 — Correlación multisource y DENUE
 
 | ID | ADR-023 |
