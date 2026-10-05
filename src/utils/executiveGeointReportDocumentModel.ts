@@ -573,23 +573,58 @@ function flattenVisibleText(sections: ExecutiveDocumentSection[], placements: Ex
   ].filter(Boolean);
 }
 
+export const REPORT_DOCUMENT_MODEL_BOUNDARY_CODES = [
+  'REPORT_DOCUMENT_MODEL_IDENTITY_FAILED',
+  'REPORT_DOCUMENT_MODEL_SECTIONS_FAILED',
+  'REPORT_DOCUMENT_MODEL_VISUAL_PLACEMENTS_FAILED',
+  'REPORT_DOCUMENT_MODEL_SCINCE_COVER_FAILED',
+  'REPORT_DOCUMENT_MODEL_COVER_CONTENT_FAILED',
+  'REPORT_DOCUMENT_MODEL_SEMANTIC_INTEGRITY_FAILED',
+  'REPORT_DOCUMENT_MODEL_COVER_MAP_ATTACHMENT_FAILED',
+  'REPORT_DOCUMENT_MODEL_VISIBLE_TEXT_FAILED',
+  'REPORT_DOCUMENT_MODEL_TRACEABILITY_FAILED',
+  'REPORT_DOCUMENT_MODEL_EVIDENCE_REFERENCES_FAILED',
+  'REPORT_DOCUMENT_MODEL_SOURCE_PROVENANCE_FAILED',
+] as const;
+export type ReportDocumentModelBoundaryCode = typeof REPORT_DOCUMENT_MODEL_BOUNDARY_CODES[number];
+export class ReportDocumentModelBoundaryError extends Error {
+  readonly boundaryCode: ReportDocumentModelBoundaryCode;
+  declare readonly cause: unknown;
+  constructor(boundaryCode: ReportDocumentModelBoundaryCode, cause: unknown) {
+    super(boundaryCode);
+    this.boundaryCode = boundaryCode;
+    Object.defineProperty(this, 'cause', { value: cause, enumerable: false });
+  }
+}
+function documentBoundary<T>(code: ReportDocumentModelBoundaryCode, operation: () => T): T {
+  try { return operation(); } catch (cause) { throw new ReportDocumentModelBoundaryError(code, cause); }
+}
+
 export function buildExecutiveGeointReportDocumentModel(
   executiveModel: ExecutiveGeointReportModel,
   visualComposition: ExecutiveVisualComposition,
   institutionalInput: InstitutionalReportInput,
   options: { numeroExpediente?: string; ceipolId?: string; enforceSemanticIntegrity?: boolean } = {}
 ): ExecutiveGeointReportDocumentModel {
+  let boundaryCode: ReportDocumentModelBoundaryCode = 'REPORT_DOCUMENT_MODEL_IDENTITY_FAILED';
+  try {
   const numeroExpediente = resolveNumeroExpediente(executiveModel, options);
+  boundaryCode = 'REPORT_DOCUMENT_MODEL_SECTIONS_FAILED';
   const sections = buildSections(executiveModel, visualComposition, institutionalInput, numeroExpediente, options.enforceSemanticIntegrity);
+  boundaryCode = 'REPORT_DOCUMENT_MODEL_VISUAL_PLACEMENTS_FAILED';
   const visualPlacements = buildVisualPlacements(visualComposition, institutionalInput);
+  boundaryCode = 'REPORT_DOCUMENT_MODEL_SCINCE_COVER_FAILED';
   const scinceCover = buildScinceReportCover(institutionalInput);
+  boundaryCode = 'REPORT_DOCUMENT_MODEL_COVER_CONTENT_FAILED';
   if (scinceCover.status === 'READY') {
     const coverSection = sections.find(section => section.sectionId === 'cover')!;
     coverSection.content[0] = SCINCE_REPORT_OFFICIAL_TITLE;
     coverSection.content.push('PERFIL SOCIODEMOGRÁFICO DE LA GEOGRAFÍA ANALIZADA',
       ...scinceCover.indicators.map(indicator => `${indicator.label}: ${indicator.displayValue}`), ...scinceCover.methodology);
   }
+  boundaryCode = 'REPORT_DOCUMENT_MODEL_SEMANTIC_INTEGRITY_FAILED';
   const semanticIntegrity = buildDocumentSemanticAudit(executiveModel, institutionalInput, visualComposition, sections, visualPlacements, options.enforceSemanticIntegrity);
+  boundaryCode = 'REPORT_DOCUMENT_MODEL_COVER_MAP_ATTACHMENT_FAILED';
   if (scinceCover.status === 'READY') {
     const placement: ExecutiveVisualPlacement = {
       visualId: SCINCE_COVER_MAP_ID, sectionId: 'cover', placementRole: 'PRINCIPAL_TERRITORIAL_MAP',
@@ -603,6 +638,7 @@ export function buildExecutiveGeointReportDocumentModel(
     semanticIntegrity.requiredVisualIds.push(SCINCE_COVER_MAP_ID);
     semanticIntegrity.visualDescriptions.push({ visualId: placement.visualId, headline: placement.headline, caption: placement.caption });
   }
+  boundaryCode = 'REPORT_DOCUMENT_MODEL_SOURCE_PROVENANCE_FAILED';
   return {
     scinceCover,
     semanticIntegrity,
@@ -632,7 +668,7 @@ export function buildExecutiveGeointReportDocumentModel(
     },
     presentation: {
       documentTitle: scinceCover.status === 'READY' ? SCINCE_REPORT_OFFICIAL_TITLE : EXECUTIVE_GEOINT_OFFICIAL_TITLE,
-      visibleText: flattenVisibleText(sections, visualPlacements),
+      visibleText: documentBoundary('REPORT_DOCUMENT_MODEL_VISIBLE_TEXT_FAILED', () => flattenVisibleText(sections, visualPlacements)),
       headerFooterPolicy: {
         preserveExistingInstitutionalHeaderFooter: true,
         onlyFeedNumeroExpediente: true,
@@ -647,13 +683,13 @@ export function buildExecutiveGeointReportDocumentModel(
       modifiesHeaderFooter: false,
       rendersWord: false,
       sourceProjectId: institutionalInput.projectId,
-      traceabilityIds: collectTraceabilityIds(executiveModel, visualComposition),
-      evidenceReferences: dedupe([
+      traceabilityIds: documentBoundary('REPORT_DOCUMENT_MODEL_TRACEABILITY_FAILED', () => collectTraceabilityIds(executiveModel, visualComposition)),
+      evidenceReferences: documentBoundary('REPORT_DOCUMENT_MODEL_EVIDENCE_REFERENCES_FAILED', () => dedupe([
         ...collectEvidenceReferences(executiveModel),
         ...asArray<string>(institutionalInput.hypothesis?.supportingEvidenceIds),
         ...asArray<string>(institutionalInput.hypothesis?.contradictingEvidenceIds),
-      ]),
-      sourceProvenance: [
+      ])),
+      sourceProvenance: documentBoundary('REPORT_DOCUMENT_MODEL_SOURCE_PROVENANCE_FAILED', () => [
         ...(institutionalInput.scinceContext?.publicationStatus === "PUBLISHABLE" ? [{
           source: "INEGI SCINCE", sourceUrl: institutionalInput.scinceContext.snapshot.multiunit?.dataset.provenance.censusSourceUrl ?? institutionalInput.scinceContext.snapshot.provenance?.censusSourceUrl,
           observedAt: institutionalInput.scinceContext.snapshot.observedAt,
@@ -678,9 +714,13 @@ export function buildExecutiveGeointReportDocumentModel(
           source: incidenceSource(institutionalInput.crimeIncidenceExportContract),
           traceabilityId: institutionalInput.crimeIncidenceExportContract.exportId || institutionalInput.crimeIncidenceExportContract.datasetReference?.datasetId,
         }] : []),
-      ],
+      ]),
       sectionCount: sections.length,
       visualPlacementCount: visualPlacements.length,
     },
   };
+  } catch (cause) {
+    if (cause instanceof ReportDocumentModelBoundaryError) throw cause;
+    throw new ReportDocumentModelBoundaryError(boundaryCode, cause);
+  }
 }

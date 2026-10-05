@@ -13,6 +13,11 @@ import {randomUUID} from 'crypto';
 import {logReportDiagnostic,safeReportDiagnosticCode,REPORT_DIAGNOSTIC_BOUNDARY_CODES,type ReportDiagnosticStage} from '@/services/scinceContextMaterializationService';
 import { ReportInputDuplicateIdentityConflict, safeReportInputSource, reportInputConflictDiagnosticCode } from '@/utils/institutionalReportInputProjection';
 import { ReportModelsBoundaryError, REPORT_MODELS_BOUNDARY_CODES } from '@/utils/institutionalGenerationModels';
+import { ReportDocumentModelBoundaryError, REPORT_DOCUMENT_MODEL_BOUNDARY_CODES } from '@/utils/executiveGeointReportDocumentModel';
+const DOCUMENT_STRUCTURED_CODES = ['P5_BLOCKED', 'CRIME_INCIDENCE_VISUAL_SNAPSHOT_NOT_ADMITTED',
+  'CRIME_INCIDENCE_VISUAL_TOTAL_INVALID', 'CRIME_INCIDENCE_VISUAL_COUNTS_INCONSISTENT',
+  'CRIME_INCIDENCE_VISUAL_PERCENTAGES_INCONSISTENT', 'CRIME_INCIDENCE_VISUAL_PERIOD_MISMATCH',
+  'CRIME_INCIDENCE_VISUAL_TEMPORAL_COUNTS_INVALID'] as const;
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
@@ -76,13 +81,22 @@ export async function POST(request: Request) {
     return NextResponse.json(manifest, { headers });
   } catch(error) {
     const modelsWrapper=error instanceof ReportModelsBoundaryError ? error : null;
-    const originalError=modelsWrapper ? modelsWrapper.cause : error;
+    const modelsCause=modelsWrapper ? modelsWrapper.cause : error;
+    const documentWrapper=modelsCause instanceof ReportDocumentModelBoundaryError ? modelsCause : null;
+    const originalError=documentWrapper ? documentWrapper.cause : modelsCause;
     const known=safeReportDiagnosticCode(originalError);
     const code=known!=='UNKNOWN_INTERNAL_ERROR'?known:Object.hasOwn(REPORT_DIAGNOSTIC_BOUNDARY_CODES,stage)
       ? REPORT_DIAGNOSTIC_BOUNDARY_CODES[stage as keyof typeof REPORT_DIAGNOSTIC_BOUNDARY_CODES] : known;
     const inputConflictCode=reportInputConflictDiagnosticCode(originalError);
     const modelsBoundaryCode=modelsWrapper && REPORT_MODELS_BOUNDARY_CODES.find(value=>value===modelsWrapper.boundaryCode);
-    const directCode=inputConflictCode ?? (known==='UNKNOWN_INTERNAL_ERROR' ? modelsBoundaryCode : null);
+    const documentBoundaryCode=documentWrapper && REPORT_DOCUMENT_MODEL_BOUNDARY_CODES.find(value=>value===documentWrapper.boundaryCode);
+    let documentStructuredCode: string | undefined;
+    try {
+      const prefix=originalError instanceof Error ? originalError.message.split(':')[0] : '';
+      documentStructuredCode=DOCUMENT_STRUCTURED_CODES.find(value=>value===prefix);
+    } catch { /* Unreadable errors retain the closed boundary fallback. */ }
+    const directCode=known!=='UNKNOWN_INTERNAL_ERROR' ? null :
+      documentStructuredCode ?? inputConflictCode ?? documentBoundaryCode ?? modelsBoundaryCode;
     if(directCode) {
       try {
         if(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(correlationId))
