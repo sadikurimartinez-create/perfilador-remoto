@@ -191,10 +191,12 @@ function buildTemporalEvolutionChart(
 export function buildCrimeIncidenceInstitutionalVisualSpecifications(
   projection: CrimeIncidenceAnalyticalProjection
 ): CrimeIncidenceInstitutionalVisualSet {
-  if (projection.sourceQuery?.status !== "EXECUTED" || projection.sourceQuery?.admission?.accepted !== true ||
-    !normalizeText(projection.datasetReference?.datasetId) || !projection.lineage ||
-    /MOCK|SIMULAT|SYNTHETIC/i.test(JSON.stringify(projection.sourceQuery?.request?.datasetIdentity || {}))) {
-    throw new Error("CRIME_INCIDENCE_VISUAL_SNAPSHOT_NOT_ADMITTED");
+  if (projection.sourceQuery?.status !== "EXECUTED") throw new Error("CRIME_INCIDENCE_VISUAL_QUERY_NOT_EXECUTED");
+  if (projection.sourceQuery?.admission?.accepted !== true) throw new Error("CRIME_INCIDENCE_VISUAL_ADMISSION_NOT_ACCEPTED");
+  if (!normalizeText(projection.datasetReference?.datasetId)) throw new Error("CRIME_INCIDENCE_VISUAL_DATASET_ID_MISSING");
+  if (!projection.lineage) throw new Error("CRIME_INCIDENCE_VISUAL_LINEAGE_MISSING");
+  if (/MOCK|SIMULAT|SYNTHETIC/i.test(JSON.stringify(projection.sourceQuery?.request?.datasetIdentity || {}))) {
+    throw new Error("CRIME_INCIDENCE_VISUAL_DATASET_IDENTITY_SIMULATED");
   }
   const total = projection.metrics.frequency.totalRecords;
   if (!Number.isInteger(total) || total < 0) throw new Error("CRIME_INCIDENCE_VISUAL_TOTAL_INVALID");
