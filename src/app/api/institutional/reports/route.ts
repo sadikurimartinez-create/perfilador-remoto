@@ -12,6 +12,7 @@ import {resolveScinceDocumentPublication} from '@/services/scinceDocumentPublica
 import {randomUUID} from 'crypto';
 import {logReportDiagnostic,safeReportDiagnosticCode,REPORT_DIAGNOSTIC_BOUNDARY_CODES,type ReportDiagnosticStage} from '@/services/scinceContextMaterializationService';
 import { ReportInputDuplicateIdentityConflict, safeReportInputSource, reportInputConflictDiagnosticCode } from '@/utils/institutionalReportInputProjection';
+import { ReportModelsBoundaryError, REPORT_MODELS_BOUNDARY_CODES } from '@/utils/institutionalGenerationModels';
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
@@ -74,15 +75,19 @@ export async function POST(request: Request) {
     const manifest = await service.persistGeneratedPackage(input);
     return NextResponse.json(manifest, { headers });
   } catch(error) {
-    const known=safeReportDiagnosticCode(error);
+    const modelsWrapper=error instanceof ReportModelsBoundaryError ? error : null;
+    const originalError=modelsWrapper ? modelsWrapper.cause : error;
+    const known=safeReportDiagnosticCode(originalError);
     const code=known!=='UNKNOWN_INTERNAL_ERROR'?known:Object.hasOwn(REPORT_DIAGNOSTIC_BOUNDARY_CODES,stage)
       ? REPORT_DIAGNOSTIC_BOUNDARY_CODES[stage as keyof typeof REPORT_DIAGNOSTIC_BOUNDARY_CODES] : known;
-    const inputConflictCode=reportInputConflictDiagnosticCode(error);
-    if(inputConflictCode) {
+    const inputConflictCode=reportInputConflictDiagnosticCode(originalError);
+    const modelsBoundaryCode=modelsWrapper && REPORT_MODELS_BOUNDARY_CODES.find(value=>value===modelsWrapper.boundaryCode);
+    const directCode=inputConflictCode ?? (known==='UNKNOWN_INTERNAL_ERROR' ? modelsBoundaryCode : null);
+    if(directCode) {
       try {
         if(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(correlationId))
-          console.error(`[REPORT DIAGNOSTIC] correlationId=${correlationId} stage=${stage} code=${inputConflictCode}${error instanceof ReportInputDuplicateIdentityConflict
-            ? ` leftSource=${safeReportInputSource(error.leftSource)} rightSource=${safeReportInputSource(error.rightSource)}` : ""}`);
+          console.error(`[REPORT DIAGNOSTIC] correlationId=${correlationId} stage=${stage} code=${directCode}${originalError instanceof ReportInputDuplicateIdentityConflict
+            ? ` leftSource=${safeReportInputSource(originalError.leftSource)} rightSource=${safeReportInputSource(originalError.rightSource)}` : ""}`);
       } catch { /* Diagnostic transport must not affect the public response. */ }
     } else logReportDiagnostic(correlationId,stage,code);
     return NextResponse.json({ error: "REPORT_BOUNDARY_DENIED" }, { status: 403, headers });
