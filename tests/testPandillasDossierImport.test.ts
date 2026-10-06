@@ -1,4 +1,5 @@
 import type { GangEntity, GangMember } from '../src/modules/pandillas/pandillas.mapper';
+import { parseAndValidateR3Payload, previewR3Update, buildR3UpdateResult, reviewR3Update, canApplyR3Update } from '../src/modules/pandillas/pandillasDossierImport';
 import { buildDossierImportResult as build, previewDossierImport as preview,
   normalizePandillasImportText, parseAndValidateDossierImportPayload as parse, reviewDossierImport as review,
   canApplyDossierImport as canApply, dossierImportFingerprint, verifyDossierImportWrite,
@@ -6,6 +7,102 @@ import { buildDossierImportResult as build, previewDossierImport as preview,
 
 const member = (nombre = 'Persona Ejemplo'): GangMember => ({ nombre, alias: 'Ejemplo', rol: '', tatuajes: 'Marca X', telefono: 'Ejemplo', escuela: 'Escuela A' });
 const gang = (): GangEntity => ({ id: 'gang-example', projectId: 'project-example', nombre: 'Grupo Ejemplo', zonaInfluencia: '', integrantes: [member()] });
+
+describe('R3 UPDATE_ONLY (fixtures ficticias, sin persistencia)', () => {
+  const input = (extra: Record<string, unknown> = {}) => ({ schemaVersion: '3.0', module: 'pandillas', operation: 'UPDATE_ONLY', targetGangName: 'Grupo Ejemplo', membersUpdate: [{ nombre: 'Persona Ejemplo', changes: { complexion: 'Dato documental' } }], ...extra });
+  const parseR3 = (extra: Record<string, unknown> = {}) => parseAndValidateR3Payload(JSON.stringify(input(extra)));
+  test('schema separado y campos documentales aceptados', () => {
+    expect(parseR3({ gangUpdate: { aliasConocidos: 'Alias documental' } }).schemaVersion).toBe('3.0');
+    expect(buildR3UpdateResult(gang(), parseR3()).integrantes[0].complexion).toBe('Dato documental');
+  });
+  test.each(['ADD', 'DELETE', 'UPDATE', null])('rechaza operación %s', operation => expect(() => parseR3({ operation })).toThrow('R3_UPDATE_ONLY_REQUIRED'));
+  test.each(['nombre', 'id', 'projectId', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy', 'geoReportId', 'peligrosidad', 'nivelRiesgo', 'resumenInteligencia', 'geometrias', 'relaciones', 'cronologiaEventos', 'imagenesGrafiti', 'grafitiInfo', 'archivosAnexos', 'desconocido'])('rechaza campo pandilla %s', field => {
+    expect(() => parseR3({ gangUpdate: { [field]: null } })).toThrow('R3_UNKNOWN_FIELD');
+  });
+  test.each(['nombre', 'id', 'fotografiaUrl', 'nivelViolencia', 'riesgoCriminogeno', 'peligrosidadCalculada', 'georreferencia', 'fechaNacimiento', 'nacionalidad', 'padre', 'madre', 'desconocido'])('rechaza campo integrante %s', field => {
+    expect(() => parseR3({ membersUpdate: [{ nombre: 'Persona Ejemplo', changes: { [field]: null } }] })).toThrow('R3_UNKNOWN_FIELD');
+  });
+  test.each([null, '', '   '])('ausencia %s no destruye', value => {
+    const existing = gang();
+    const payload = parseR3({ membersUpdate: [{ nombre: 'Persona Ejemplo', changes: { alias: value } }] });
+    expect(buildR3UpdateResult(existing, payload)).toEqual(existing);
+    expect(previewR3Update(existing, payload).fields).toEqual([]);
+  });
+  test('arrays vacíos omiten; no vacíos tienen antes/después explícitos', () => {
+    const existing = { ...gang(), coloniasAsociadas: ['Anterior'] };
+    expect(buildR3UpdateResult(existing, parseR3({ gangUpdate: { coloniasAsociadas: [] } })).coloniasAsociadas).toEqual(['Anterior']);
+    const payload = parseR3({ gangUpdate: { coloniasAsociadas: ['Documentada'] }, membersUpdate: [] });
+    expect(previewR3Update(existing, payload).fields).toEqual([{ scope: 'GANG', field: 'coloniasAsociadas', currentValue: ['Anterior'], proposedValue: ['Documentada'], classification: 'UPDATE' }]);
+  });
+  test.each(['Persona Nueva', 'persona ejemplo', 'Persona Ejemplo '])('nombre no exacto %s no crea', nombre => {
+    const payload = parseR3({ membersUpdate: [{ nombre, changes: { alias: 'X' } }] });
+    expect(previewR3Update(gang(), payload).conflicts).toContain(`R3_MEMBER_NOT_FOUND:${nombre}`);
+    expect(() => buildR3UpdateResult(gang(), payload)).toThrow();
+  });
+  test('duplicados existentes y entrantes bloquean', () => {
+    expect(previewR3Update({ ...gang(), integrantes: [member(), member()] }, parseR3()).conflicts).toContain('R3_AMBIGUOUS_MEMBER:Persona Ejemplo');
+    expect(previewR3Update(gang(), parseR3({ membersUpdate: [input().membersUpdate[0], input().membersUpdate[0]] })).conflicts).toContain('R3_DUPLICATE_INCOMING_MEMBER:Persona Ejemplo');
+  });
+  test('pandilla distinta y nombres globales no seleccionan objetivo', () => {
+    expect(previewR3Update(gang(), parseR3({ targetGangName: 'grupo ejemplo' })).conflicts).toContain('TARGET_GANG_MISMATCH');
+    expect(() => buildR3UpdateResult(gang(), parseR3({ targetGangName: 'Otra' }))).toThrow();
+  });
+  test('preview por campo y NO_CHANGE; resumen cuenta solo updates', () => {
+    const payload = parseR3({ gangUpdate: { zonaInfluencia: 'Zona' }, membersUpdate: [{ nombre: 'Persona Ejemplo', changes: { alias: 'Ejemplo', complexion: 'Dato' } }] });
+    const preview = previewR3Update(gang(), payload);
+    expect(preview.summary).toEqual({ UPDATE_FIELDS: 2, NO_CHANGE_FIELDS: 1, CONFLICTS: 0, MEMBERS_TOUCHED: 1, GANG_FIELDS_TOUCHED: 1 });
+    expect(preview.fields.find(field => field.field === 'alias')).toMatchObject({ currentValue: 'Ejemplo', proposedValue: 'Ejemplo', classification: 'NO_CHANGE' });
+    expect(preview.fields.every(field => ['UPDATE', 'NO_CHANGE', 'CONFLICT'].includes(field.classification))).toBe(true);
+  });
+  test('preserva propiedades ajenas, orden, longitud, versión y fuente sin mutaciones', () => {
+    const existing: GangEntity = { ...gang(), updatedAt: 42, createdAt: 1, nivelRiesgo: 'Alto', integrantes: [{ ...member(), nivelViolencia: 'Alto', peligrosidadCalculada: 50 }, member('Otra Persona')] };
+    const before = structuredClone(existing); const payload = parseR3(); const original = structuredClone(payload);
+    const result = buildR3UpdateResult(existing, payload);
+    expect(result).toEqual({ ...before, integrantes: [{ ...before.integrantes[0], complexion: 'Dato documental' }, before.integrantes[1]] });
+    expect(existing).toEqual(before); expect(payload).toEqual(original);
+    expect(result.integrantes.map(m => m.nombre)).toEqual(before.integrantes.map(m => m.nombre));
+    expect(result).not.toHaveProperty('source');
+  });
+  test.each([0, 42, null])('versión %s capturada del registro', updatedAt => {
+    const existing = updatedAt === null ? gang() : { ...gang(), updatedAt };
+    const payload = parseR3(); const reviewed = reviewR3Update(existing, payload);
+    expect(reviewed.expectedUpdatedAt).toBe(updatedAt);
+    expect(canApplyR3Update(existing, payload, reviewed)).toBe(true);
+    expect(canApplyR3Update({ ...existing, updatedAt: 99 }, payload, reviewed)).toBe(false);
+    expect(canApplyR3Update(existing, parseR3({ gangUpdate: { aliasConocidos: 'Cambio' } }), reviewed)).toBe(false);
+    expect(canApplyR3Update({ ...existing, zonaInfluencia: 'Cambio' }, payload, reviewed)).toBe(false);
+  });
+  test('conflicto y preview ausente impiden aplicar', () => {
+    const payload = parseR3({ targetGangName: 'Otra' });
+    expect(canApplyR3Update(gang(), payload, reviewR3Update(gang(), payload))).toBe(false);
+    expect(canApplyR3Update(gang(), parseR3(), null)).toBe(false);
+  });
+  test('contrato final GANG/MEMBER sin propiedades legacy', () => {
+    const payload = parseR3({ gangUpdate: { zonaInfluencia: 'Zona documental' }, membersUpdate: [{ nombre: 'Persona Ejemplo', changes: { alias: 'Ejemplo', complexion: 'Dato' } }] });
+    const fields = previewR3Update(gang(), payload).fields;
+    expect(fields.find(row => row.scope === 'GANG')).toEqual({ scope: 'GANG', field: 'zonaInfluencia', currentValue: '', proposedValue: 'Zona documental', classification: 'UPDATE' });
+    expect(fields.find(row => row.field === 'complexion')).toEqual({ scope: 'MEMBER', memberName: 'Persona Ejemplo', field: 'complexion', currentValue: undefined, proposedValue: 'Dato', classification: 'UPDATE' });
+    expect(fields.find(row => row.field === 'alias')).toEqual({ scope: 'MEMBER', memberName: 'Persona Ejemplo', field: 'alias', currentValue: 'Ejemplo', proposedValue: 'Ejemplo', classification: 'NO_CHANGE' });
+    for (const row of fields) {
+      for (const legacy of ['nombre', 'current', 'proposed', 'action']) expect(row).not.toHaveProperty(legacy);
+      if (row.scope === 'GANG') expect(row).not.toHaveProperty('memberName');
+      else expect(row.memberName).toBe('Persona Ejemplo');
+    }
+  });
+  test('contrato CONFLICT y contadores bloquean aplicación', () => {
+    const payload = parseR3({ membersUpdate: [{ nombre: 'Persona Ausente', changes: { alias: 'Dato' } }] });
+    const reviewed = reviewR3Update(gang(), payload);
+    expect(reviewed.preview.fields).toEqual([{ scope: 'MEMBER', memberName: 'Persona Ausente', field: '(registro)', currentValue: undefined, proposedValue: undefined, classification: 'CONFLICT' }]);
+    expect(reviewed.preview.summary).toEqual({ UPDATE_FIELDS: 0, NO_CHANGE_FIELDS: 0, CONFLICTS: 1, MEMBERS_TOUCHED: 0, GANG_FIELDS_TOUCHED: 0 });
+    for (const legacy of ['nombre', 'current', 'proposed', 'action']) expect(reviewed.preview.fields[0]).not.toHaveProperty(legacy);
+    expect(canApplyR3Update(gang(), payload, reviewed)).toBe(false);
+  });
+  test('sexo documental enum; valores incompatibles no se infieren', () => {
+    expect(parseR3({ membersUpdate: [{ nombre: 'Persona Ejemplo', changes: { sexo: 'Femenino' } }] }).membersUpdate[0].changes.sexo).toBe('Femenino');
+    expect(() => parseR3({ membersUpdate: [{ nombre: 'Persona Ejemplo', changes: { sexo: 'F' } }] })).toThrow('R3_INVALID_FIELD_VALUE');
+  });
+  test.each([{ projectId: 'otro' }, { expectedUpdatedAt: 3 }, { gangUpdate: { estatus: 'Desconocido' } }, { gangUpdate: { coloniasAsociadas: 'Texto' } }, { membersUpdate: [{ nombre: 'Persona Ejemplo', changes: { edad: -1 } }] }])('contrato rechaza campos y tipos inválidos %j', extra => expect(() => parseR3(extra)).toThrow());
+});
 test('T1 ADD supplies required empty strings without inventing status', () => {
   const input = [{ nombre: 'Persona Nueva' }];
   expect(preview(gang(), input).summary.ADD).toBe(1);

@@ -15,7 +15,7 @@ import {
 } from "./pandillas.mapper";
 import { PandillasService } from "./pandillas.service";
 import { parseAndValidateDossierImportPayload, reviewDossierImport, canApplyDossierImport,
-  buildDossierImportResult, verifyDossierImportWrite, type DossierImportPayload, type DossierImportReview } from "./pandillasDossierImport";
+  buildDossierImportResult, verifyDossierImportWrite, type DossierImportPayload, type DossierImportReview, parseAndValidateR3Payload, reviewR3Update, canApplyR3Update, buildR3UpdateResult, type R3DossierPayload, type R3Review } from "./pandillasDossierImport";
 import { PandillasEngine } from "./pandillas.engine";
 import { PandillasSweepError, type PandillasSweepStatus } from "./pandillas.sweepStatus";
 import { adaptPandillasCanonicalInput } from "@/services/geoint/pandillasCanonicalInputAdapter";
@@ -240,6 +240,8 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
   const [selectedGangId, setSelectedGangId] = useState<string>("");
   const [dossierPayload, setDossierPayload] = useState<DossierImportPayload | null>(null);
   const [dossierReview, setDossierReview] = useState<DossierImportReview | null>(null);
+  const [r3Payload, setR3Payload] = useState<R3DossierPayload | null>(null);
+  const [r3Review, setR3Review] = useState<R3Review | null>(null);
   const [dossierFile, setDossierFile] = useState<{ name: string; size: number } | null>(null);
   const [dossierStatus, setDossierStatus] = useState('');
   const [dossierError, setDossierError] = useState('');
@@ -252,7 +254,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
   dossierContext.current = dossierContextKey;
   useEffect(() => {
     dossierReadSequence.current++;
-    setDossierPayload(null); setDossierReview(null); setDossierFile(null); setDossierStatus(''); setDossierError('');
+    setR3Payload(null); setR3Review(null); setDossierPayload(null); setDossierReview(null); setDossierFile(null); setDossierStatus(''); setDossierError('');
     if (dossierFileInput.current) dossierFileInput.current.value = '';
   }, [dossierContextKey]);
   const dossierTarget = useMemo(() => {
@@ -262,7 +264,9 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
       || selected.length !== 1 || selected[0].projectId !== selectedProjectId) return null;
     return selected[0];
   }, [storedGangs, selectedGangId, projectId, activeProject?.id, user]);
-  const dossierCanApply = !!dossierTarget && !!dossierPayload && canApplyDossierImport(dossierTarget, dossierPayload, dossierReview);
+  const dossierCanApply = !!dossierTarget && (r3Payload
+    ? !!r3Review?.preview.summary.UPDATE_FIELDS && canApplyR3Update(dossierTarget, r3Payload, r3Review)
+    : !!dossierPayload && canApplyDossierImport(dossierTarget, dossierPayload, dossierReview));
 
   // --- GENERAL GANG DATA STATES ---
   const [nombre, setNombre] = useState("");
@@ -904,7 +908,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
   const selectDossierFile = async (file?: File) => {
     const sequence = ++dossierReadSequence.current;
     const context = dossierContext.current;
-    setDossierPayload(null); setDossierReview(null); setDossierError(''); setDossierFile(null); setDossierStatus('');
+    setR3Payload(null); setR3Review(null); setDossierPayload(null); setDossierReview(null); setDossierError(''); setDossierFile(null); setDossierStatus('');
     if (!file) return;
     setDossierFile({ name: file.name, size: file.size }); setDossierStatus('ARCHIVO CARGADO');
     try {
@@ -912,8 +916,11 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
       if (file.size > 900000) throw new Error('IMPORT_FILE_TOO_LARGE');
       const text = await file.text();
       if (sequence !== dossierReadSequence.current || context !== dossierContext.current) return;
-      const payload = parseAndValidateDossierImportPayload(text);
-      setDossierPayload(payload); setDossierStatus('VALIDADO');
+      let schemaVersion: unknown;
+      try { schemaVersion = JSON.parse(text)?.schemaVersion; } catch { throw new Error('INVALID_JSON'); }
+      if (schemaVersion === '3.0') setR3Payload(parseAndValidateR3Payload(text));
+      else setDossierPayload(parseAndValidateDossierImportPayload(text));
+      setDossierStatus('VALIDADO');
     } catch (error) {
       if (sequence !== dossierReadSequence.current || context !== dossierContext.current) return;
       setDossierError(error instanceof Error ? error.message : 'INVALID_PAYLOAD'); setDossierStatus('ERROR');
@@ -921,12 +928,47 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
     }
   };
   const previewInstitutionalDossier = () => {
-    setDossierReview(null); setDossierError('');
+    setR3Review(null); setDossierReview(null); setDossierError('');
     try {
+      if (dossierTarget && r3Payload) {
+        const review = reviewR3Update(dossierTarget, r3Payload);
+        setR3Review(review); setDossierStatus(review.preview.conflicts.length ? 'CONFLICTO' : 'PREVIEW R3 LISTO');
+        return;
+      }
       if (!dossierTarget || !dossierPayload) throw new Error('PANDILLAS_TARGET_REQUIRED');
       const review = reviewDossierImport(dossierTarget, dossierPayload);
       setDossierReview(review); setDossierStatus(review.preview.conflicts.length ? 'CONFLICTO' : 'PREVIEW LISTO');
     } catch (error) { setDossierError(error instanceof Error ? error.message : 'INVALID_PAYLOAD'); setDossierStatus('ERROR'); }
+  };
+  const applyInstitutionalR3 = async () => {
+    if (dossierLock.current || !dossierCanApply || !dossierTarget || !r3Payload || !r3Review) return;
+    const summary = r3Review.preview.summary;
+    if (summary.CONFLICTS > 0) return;
+    if (!window.confirm(`Se actualizará el enriquecimiento R3 de:\n\n${dossierTarget.nombre}\n\nCampos a actualizar: ${summary.UPDATE_FIELDS}\nCampos sin cambios: ${summary.NO_CHANGE_FIELDS}\nConflictos: ${summary.CONFLICTS}\nIntegrantes afectados: ${summary.MEMBERS_TOUCHED}\nCampos de pandilla afectados: ${summary.GANG_FIELDS_TOUCHED}\n\nLa operación utilizará la sesión institucional activa, versionado y auditoría institucional.\n\n¿Desea continuar?`)) return;
+    const context = dossierContext.current;
+    dossierLock.current = true; setDossierBusy(true); setDossierError('');
+    let writeSucceeded = false;
+    try {
+      if (!canApplyR3Update(dossierTarget, r3Payload, r3Review)) throw new Error('IMPORT_PREVIEW_INVALIDATED');
+      const result = buildR3UpdateResult(dossierTarget, r3Payload);
+      const savedId = await PandillasService.saveExistingGangWithVersion(result, r3Review.expectedUpdatedAt);
+      writeSucceeded = true;
+      if (savedId !== r3Review.gangId) throw new Error('IMPORT_WRITE_UNVERIFIED');
+      const records = await PandillasService.getAllGangs();
+      const matches = records.filter(item => item.id === r3Review.gangId);
+      if (matches.length !== 1 || !verifyDossierImportWrite(result, matches[0], r3Review.expectedUpdatedAt)
+        || context !== dossierContext.current) throw new Error('IMPORT_WRITE_UNVERIFIED');
+      loadGangIntoState(matches[0]); dossierReadSequence.current++;
+      setR3Payload(null); setR3Review(null); setDossierFile(null);
+      if (dossierFileInput.current) dossierFileInput.current.value = '';
+      setDossierStatus(`R3 VERIFICADO — Campos actualizados: ${summary.UPDATE_FIELDS}; integrantes: ${summary.MEMBERS_TOUCHED}`);
+    } catch (error) {
+      const code = writeSucceeded ? 'IMPORT_WRITE_UNVERIFIED' : error instanceof Error ? error.message : 'IMPORT_FAILED';
+      setR3Review(null); setDossierStatus('ERROR');
+      setDossierError(code === 'PANDILLAS_VERSION_CONFLICT'
+        ? 'El registro cambió. Vuelva a cargar la pandilla y genere una nueva previsualización.'
+        : code === 'PANDILLAS_TARGET_NOT_FOUND' ? 'La pandilla ya no existe. Operación cancelada.' : code);
+    } finally { dossierLock.current = false; setDossierBusy(false); }
   };
   const applyInstitutionalDossier = async () => {
     if (dossierLock.current || !dossierCanApply || !dossierTarget || !dossierPayload || !dossierReview) return;
@@ -950,7 +992,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
         || context !== dossierContext.current) throw new Error('IMPORT_WRITE_UNVERIFIED');
       loadGangIntoState(matches[0]);
       dossierReadSequence.current++;
-      setDossierPayload(null); setDossierReview(null); setDossierFile(null);
+      setR3Payload(null); setR3Review(null); setDossierPayload(null); setDossierReview(null); setDossierFile(null);
       if (dossierFileInput.current) dossierFileInput.current.value = '';
       setDossierStatus(`IMPORTACIÓN VERIFICADA — Integrantes agregados: ${summary.ADD}; actualizados: ${summary.UPDATE}; sin cambios: ${summary.NO_CHANGE}`);
     } catch (error) {
@@ -2226,17 +2268,31 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
               </label>
               {dossierFile && <p className="text-xs text-slate-300">{dossierFile.name} · {dossierFile.size} bytes</p>}
               {dossierPayload && <p className="text-xs text-slate-300">Pandilla declarada: {dossierPayload.targetGangName} · Registros: {dossierPayload.members.length}</p>}
-              <button type="button" disabled={!dossierTarget || !dossierPayload || dossierBusy}
+              <button type="button" disabled={!dossierTarget || (!dossierPayload && !r3Payload) || dossierBusy}
                 onClick={previewInstitutionalDossier}
                 className="px-4 py-2 rounded-lg bg-slate-800 text-slate-200 disabled:opacity-40">
                 PREVISUALIZAR IMPORTACIÓN
               </button>
               <button type="button" disabled={!dossierCanApply || dossierBusy}
-                onClick={() => { void applyInstitutionalDossier(); }}
+                onClick={() => { void (r3Payload ? applyInstitutionalR3() : applyInstitutionalDossier()); }}
                 className="ml-2 px-4 py-2 rounded-lg bg-indigo-800 text-white disabled:opacity-40">CONFIRMAR E IMPORTAR</button>
               <p className="text-xs text-slate-400">Seleccione una pandilla existente de este expediente. Solo importación textual; fotografías deshabilitadas.</p>
               <p role="status" className="text-sm text-slate-200">{dossierBusy ? 'IMPORTACIÓN EN CURSO' : dossierStatus}</p>
               {dossierError && <p role="alert" className="text-sm text-red-300">{dossierError}</p>}
+              {r3Payload && <p className="text-xs text-slate-300">R3 UPDATE_ONLY · Pandilla: {r3Payload.targetGangName} · Registros: {r3Payload.membersUpdate.length}</p>}
+              {r3Review && <div className="text-sm text-slate-200 space-y-1">
+                <p>UPDATE_FIELDS: {r3Review.preview.summary.UPDATE_FIELDS} · NO_CHANGE_FIELDS: {r3Review.preview.summary.NO_CHANGE_FIELDS} · CONFLICTS: {r3Review.preview.summary.CONFLICTS}</p>
+                <p>MEMBERS_TOUCHED: {r3Review.preview.summary.MEMBERS_TOUCHED} · GANG_FIELDS_TOUCHED: {r3Review.preview.summary.GANG_FIELDS_TOUCHED}</p>
+                {r3Review.preview.conflicts.map((conflict, index) => <p key={index} role="alert">{conflict}</p>)}
+                <div className="overflow-x-auto"><table className="w-full text-xs text-left">
+                  <thead><tr><th>Ámbito</th><th>Nombre</th><th>Campo</th><th>Valor actual</th><th>Valor propuesto</th><th>Acción</th></tr></thead>
+                  <tbody>{r3Review.preview.fields.map((field, index) => <tr key={index}>
+                    <td>{field.scope}</td><td>{field.memberName ?? '—'}</td><td>{field.field}</td>
+                    <td className="whitespace-pre-wrap">{JSON.stringify(field.currentValue) ?? '—'}</td>
+                    <td className="whitespace-pre-wrap">{JSON.stringify(field.proposedValue) ?? '—'}</td><td>{field.classification}</td>
+                  </tr>)}</tbody>
+                </table></div>
+              </div>}
               {dossierReview && (
                 <div role="status" className="text-sm text-slate-200 space-y-1">
                   <p>Pandilla objetivo: {dossierReview.preview.targetGang}</p>
