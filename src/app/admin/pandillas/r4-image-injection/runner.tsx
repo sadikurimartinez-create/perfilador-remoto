@@ -1,12 +1,47 @@
 'use client';
-import { useRef, useState } from 'react';
-import { prepareR4RunnerFiles, R4_RUNNER_CONFIRMATION, R4_RUNNER_PROJECT, type R4RunnerPair } from '@/utils/pandillasR4RunnerFiles';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { captureR4FileSelection, inspectR4Folder, precheckR4Folder, prepareR4RunnerFiles, R4_RUNNER_CONFIRMATION, R4_RUNNER_PROJECT, type R4RunnerPair, type R4FolderKind } from '@/utils/pandillasR4RunnerFiles';
 
 const endpoint = '/api/pandillas/r4/image-injection';
 const directory = { webkitdirectory: '', directory: '' };
+const sha256 = async (file: File) => {
+  const hash = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+  return Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, '0')).join('');
+};
 export default function R4ImageInjectionRunner() {
   const [payload, setPayload] = useState<any>(null);
-  const [files, setFiles] = useState<File[]>([]);
+  const [originalFiles, setOriginalFiles] = useState<File[]>([]);
+  const [derivedFiles, setDerivedFiles] = useState<File[]>([]);
+  const [manualFiles, setManualFiles] = useState<File[]>([]);
+  const files = useMemo(() => [...originalFiles, ...derivedFiles, ...manualFiles], [originalFiles, derivedFiles, manualFiles]);
+  const inspect = (selected: File[], kind: R4FolderKind) => {
+    if (!payload) return { coverage: null, error: '' };
+    try { return { coverage: inspectR4Folder(payload, selected, kind), error: '' }; }
+    catch (error) { return { coverage: null, error: error instanceof Error ? error.message : 'Payload inválido.' }; }
+  };
+  const originalInspection = useMemo(() => inspect(originalFiles, 'original'), [payload, originalFiles]);
+  const derivedInspection = useMemo(() => inspect(derivedFiles, 'derived'), [payload, derivedFiles]);
+  const [folderHashes, setFolderHashes] = useState<Record<R4FolderKind, string>>({ original: '', derived: '' });
+  useEffect(() => {
+    let cancelled = false;
+    setFolderHashes({ original: '', derived: '' });
+    const check = async (kind: R4FolderKind, selected: File[], inspection: typeof originalInspection) => {
+      if (!payload || !selected.length || !inspection.coverage) return;
+      if (!inspection.coverage.valid) {
+        if (!cancelled) setFolderHashes(prior => ({ ...prior, [kind]: inspection.coverage!.missing ? 'FAIL: faltan archivos requeridos' : 'FAIL: nombres ambiguos' }));
+        return;
+      }
+      if (!cancelled) setFolderHashes(prior => ({ ...prior, [kind]: 'Verificando SHA-256…' }));
+      try {
+        const checked = await precheckR4Folder(payload, selected, kind, sha256);
+        if (!cancelled) setFolderHashes(prior => ({ ...prior, [kind]: `${checked.hashMatch}/79` }));
+      } catch (error) {
+        if (!cancelled) setFolderHashes(prior => ({ ...prior, [kind]: `FAIL: ${error instanceof Error ? error.message : 'Hash inválido.'}` }));
+      }
+    };
+    void Promise.all([check('original', originalFiles, originalInspection), check('derived', derivedFiles, derivedInspection)]);
+    return () => { cancelled = true; };
+  }, [payload, originalFiles, derivedFiles, originalInspection, derivedInspection]);
   const [pairs, setPairs] = useState<R4RunnerPair[]>([]);
   const [confirmation, setConfirmation] = useState('');
   const [statuses, setStatuses] = useState<string[]>([]);
@@ -35,10 +70,7 @@ export default function R4ImageInjectionRunner() {
     if (inFlight.current) return;
     inFlight.current = true; setBusy(true); invalidate();
     try {
-      const prepared = await prepareR4RunnerFiles(payload, files, async file => {
-        const hash = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
-        return Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, '0')).join('');
-      });
+      const prepared = await prepareR4RunnerFiles(payload, files, sha256);
       // Complete server-side readiness for ALL 79 before allowing confirmation.
       const receipts: string[] = [];
       for (let i = 0; i < prepared.length; i++) {
@@ -85,14 +117,37 @@ export default function R4ImageInjectionRunner() {
       if (file) try { if (file.size > 128 * 1024) throw new Error('Payload demasiado grande.'); setPayload(JSON.parse(await file.text())); }
       catch { setMessage('JSON inválido.'); }
     }} /></label>
-    <label className="block">Añadir carpeta de originales o derivados <input type="file" {...directory} multiple disabled={busy} onChange={event => {
-      invalidate(); setFiles(prior => [...prior, ...Array.from(event.target.files || [])]); event.target.value = '';
+    <label className="block">Carpeta originals <input type="file" {...directory} multiple disabled={busy} onChange={event => {
+      const selected = captureR4FileSelection(event.currentTarget);
+      if (!selected.length) { setMessage('No se recibieron archivos de la carpeta originals.'); return; }
+      invalidate(); setOriginalFiles(selected); setMessage(`CARPETA ORIGINAL DETECTADA · ARCHIVOS EN CARPETA=${selected.length}`);
     }} /></label>
+    <label className="block">Carpeta derived <input type="file" {...directory} multiple disabled={busy} onChange={event => {
+      const selected = captureR4FileSelection(event.currentTarget);
+      if (!selected.length) { setMessage('No se recibieron archivos de la carpeta derived.'); return; }
+      invalidate(); setDerivedFiles(selected); setMessage(`CARPETA DERIVED DETECTADA · ARCHIVOS EN CARPETA=${selected.length}`);
+    }} /></label>
+    {(['original', 'derived'] as const).map(kind => {
+      const selected = kind === 'original' ? originalFiles : derivedFiles;
+      const inspection = kind === 'original' ? originalInspection : derivedInspection;
+      if (!selected.length) return null;
+      return <section key={kind} className="border p-3" aria-live="polite">
+        <p>CARPETA {kind.toUpperCase()} DETECTADA</p>
+        <p>ARCHIVOS EN CARPETA={selected.length} · REQUERIDOS=79</p>
+        {inspection.coverage ? <>
+          <p>COINCIDENTES={inspection.coverage.matched} · FALTANTES={inspection.coverage.missing} · EXTRAS IGNORADOS={inspection.coverage.extraIgnored}</p>
+          {inspection.coverage.missing > 0 && <p role="alert">Faltan: {inspection.coverage.missingNames.join(', ')}</p>}
+          {inspection.coverage.duplicateNames.length > 0 && <p role="alert">Nombres ambiguos: {inspection.coverage.duplicateNames.join(', ')}</p>}
+        </> : <p>{inspection.error || 'Cargue el payload certificado para identificar los 79 requeridos.'}</p>}
+        <p>{kind.toUpperCase()}_HASH_PRECHECK={folderHashes[kind] || 'Pendiente'}</p>
+      </section>;
+    })}
     <label className="block">Añadir archivos individuales <input type="file" multiple accept="image/jpeg,image/png" disabled={busy} onChange={event => {
-      invalidate(); setFiles(prior => [...prior, ...Array.from(event.target.files || [])]); event.target.value = '';
+      const selected = captureR4FileSelection(event.currentTarget);
+      invalidate(); setManualFiles(prior => [...prior, ...selected]);
     }} /></label>
     <p>Archivos seleccionados: {files.length}. Se necesitan 79 pares original/derived (158 archivos).</p>
-    <button disabled={busy} onClick={() => { invalidate(); setFiles([]); }}>Limpiar archivos</button>
+    <button disabled={busy} onClick={() => { invalidate(); setOriginalFiles([]); setDerivedFiles([]); setManualFiles([]); }}>Limpiar archivos</button>
     <button className="block border p-2 disabled:opacity-50" disabled={busy || !payload || !files.length} onClick={precheck}>VERIFICAR ARCHIVOS Y READINESS SIN ESCRIBIR</button>
     <p role="status">{message}</p>
     <button className="border p-2 disabled:opacity-50" disabled={busy || pairs.length !== 79} onClick={() => setArmed(true)}>EJECUTAR INYECCIÓN R4 — 79 FOTOGRAFÍAS</button>
