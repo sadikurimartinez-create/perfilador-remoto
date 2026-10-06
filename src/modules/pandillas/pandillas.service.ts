@@ -75,6 +75,14 @@ export class PandillasService {
    * Saves a new gang record or updates an existing one in Firestore.
    */
   static async saveGang(gang: GangEntity, _username: string): Promise<string> { return saveInstitutionalGang(gang); }
+  static async saveExistingGangWithVersion(gang: GangEntity, expectedUpdatedAt: number | null): Promise<string> {
+    if (!gang?.id?.trim()) throw new Error('PANDILLAS_TARGET_ID_REQUIRED');
+    if (gang.id.trim().startsWith('static-gang-')) throw new Error('PANDILLAS_STATIC_TARGET_FORBIDDEN');
+    if (expectedUpdatedAt !== null && (typeof expectedUpdatedAt !== 'number' || !Number.isFinite(expectedUpdatedAt))) {
+      throw new Error('PANDILLAS_EXPECTED_VERSION_REQUIRED');
+    }
+    return saveInstitutionalGang(gang, { requireExisting: true, checkVersion: true, expectedUpdatedAt });
+  }
   static async getAllGangs(): Promise<GangEntity[]> { return await readInstitutionalCollection('pandillas') as GangEntity[]; }
   static async getGangByProjectId(projectId:string):Promise<GangEntity|null> { return (await this.getAllGangs()).find(gang=>gang.projectId===projectId)||null; }
   static async getGangByGeoReportId(geoReportId:string):Promise<GangEntity|null> { return (await this.getAllGangs()).find(gang=>gang.geoReportId===geoReportId)||null; }

@@ -14,6 +14,8 @@ import {
   calculateSimilarity
 } from "./pandillas.mapper";
 import { PandillasService } from "./pandillas.service";
+import { parseAndValidateDossierImportPayload, reviewDossierImport, canApplyDossierImport,
+  buildDossierImportResult, verifyDossierImportWrite, type DossierImportPayload, type DossierImportReview } from "./pandillasDossierImport";
 import { PandillasEngine } from "./pandillas.engine";
 import { PandillasSweepError, type PandillasSweepStatus } from "./pandillas.sweepStatus";
 import { adaptPandillasCanonicalInput } from "@/services/geoint/pandillasCanonicalInputAdapter";
@@ -236,6 +238,31 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
   // --- REGISTRY LIST STATES ---
   const [storedGangs, setStoredGangs] = useState<GangEntity[]>([]);
   const [selectedGangId, setSelectedGangId] = useState<string>("");
+  const [dossierPayload, setDossierPayload] = useState<DossierImportPayload | null>(null);
+  const [dossierReview, setDossierReview] = useState<DossierImportReview | null>(null);
+  const [dossierFile, setDossierFile] = useState<{ name: string; size: number } | null>(null);
+  const [dossierStatus, setDossierStatus] = useState('');
+  const [dossierError, setDossierError] = useState('');
+  const [dossierBusy, setDossierBusy] = useState(false);
+  const dossierLock = useRef(false);
+  const dossierReadSequence = useRef(0);
+  const dossierFileInput = useRef<HTMLInputElement>(null);
+  const dossierContextKey = `${selectedGangId}\u0000${projectId || activeProject?.id || ''}\u0000${username}`;
+  const dossierContext = useRef(dossierContextKey);
+  dossierContext.current = dossierContextKey;
+  useEffect(() => {
+    dossierReadSequence.current++;
+    setDossierPayload(null); setDossierReview(null); setDossierFile(null); setDossierStatus(''); setDossierError('');
+    if (dossierFileInput.current) dossierFileInput.current.value = '';
+  }, [dossierContextKey]);
+  const dossierTarget = useMemo(() => {
+    const selected = storedGangs.filter(gang => gang.id === selectedGangId);
+    const selectedProjectId = projectId || activeProject?.id;
+    if (!user || !selectedGangId || selectedGangId.startsWith('static-gang-') || !selectedProjectId
+      || selected.length !== 1 || selected[0].projectId !== selectedProjectId) return null;
+    return selected[0];
+  }, [storedGangs, selectedGangId, projectId, activeProject?.id, user]);
+  const dossierCanApply = !!dossierTarget && !!dossierPayload && canApplyDossierImport(dossierTarget, dossierPayload, dossierReview);
 
   // --- GENERAL GANG DATA STATES ---
   const [nombre, setNombre] = useState("");
@@ -848,6 +875,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
   };
 
   const loadGangIntoState = (gang: GangEntity) => {
+    setStoredGangs(previous => [...previous.filter(item => item.id !== gang.id), gang]);
     setSelectedGangId(gang.id || "");
     setNombre(gang.nombre || "");
     setAliasConocidos(gang.aliasConocidos || "");
@@ -871,6 +899,67 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
     setArchivos(gang.archivosAnexos || []);
     setAnalysisResult(null); // Clear previous visual report to let user sweep again
     setSelectedGangsForGis([gang.nombre || ""]);
+  };
+
+  const selectDossierFile = async (file?: File) => {
+    const sequence = ++dossierReadSequence.current;
+    const context = dossierContext.current;
+    setDossierPayload(null); setDossierReview(null); setDossierError(''); setDossierFile(null); setDossierStatus('');
+    if (!file) return;
+    setDossierFile({ name: file.name, size: file.size }); setDossierStatus('ARCHIVO CARGADO');
+    try {
+      if (!/\.json$/i.test(file.name)) throw new Error('JSON_FILE_REQUIRED');
+      if (file.size > 900000) throw new Error('IMPORT_FILE_TOO_LARGE');
+      const text = await file.text();
+      if (sequence !== dossierReadSequence.current || context !== dossierContext.current) return;
+      const payload = parseAndValidateDossierImportPayload(text);
+      setDossierPayload(payload); setDossierStatus('VALIDADO');
+    } catch (error) {
+      if (sequence !== dossierReadSequence.current || context !== dossierContext.current) return;
+      setDossierError(error instanceof Error ? error.message : 'INVALID_PAYLOAD'); setDossierStatus('ERROR');
+      if (dossierFileInput.current) dossierFileInput.current.value = '';
+    }
+  };
+  const previewInstitutionalDossier = () => {
+    setDossierReview(null); setDossierError('');
+    try {
+      if (!dossierTarget || !dossierPayload) throw new Error('PANDILLAS_TARGET_REQUIRED');
+      const review = reviewDossierImport(dossierTarget, dossierPayload);
+      setDossierReview(review); setDossierStatus(review.preview.conflicts.length ? 'CONFLICTO' : 'PREVIEW LISTO');
+    } catch (error) { setDossierError(error instanceof Error ? error.message : 'INVALID_PAYLOAD'); setDossierStatus('ERROR'); }
+  };
+  const applyInstitutionalDossier = async () => {
+    if (dossierLock.current || !dossierCanApply || !dossierTarget || !dossierPayload || !dossierReview) return;
+    const summary = dossierReview.preview.summary;
+    if (!window.confirm(`Se actualizará el Dossier de Integrantes de:\n\n${dossierTarget.nombre}\n\nAltas: ${summary.ADD}\nActualizaciones: ${summary.UPDATE}\nSin cambios: ${summary.NO_CHANGE}\n\nLa operación utilizará la sesión institucional activa y quedará registrada en la auditoría institucional.\n\n¿Desea continuar?`)) return;
+    const context = dossierContext.current;
+    dossierLock.current = true; setDossierBusy(true); setDossierError('');
+    let writeSucceeded = false;
+    try {
+      // Re-preview preserves the operator's original expected version.
+      if (!canApplyDossierImport(dossierTarget, dossierPayload, dossierReview)) throw new Error('IMPORT_PREVIEW_INVALIDATED');
+      const freshReview = reviewDossierImport(dossierTarget, dossierPayload);
+      if (freshReview.preview.conflicts.length) throw new Error('IMPORT_PREVIEW_CONFLICT');
+      const result = buildDossierImportResult(dossierTarget, dossierPayload.members);
+      const savedId = await PandillasService.saveExistingGangWithVersion(result, dossierReview.expectedUpdatedAt);
+      writeSucceeded = true;
+      if (savedId !== dossierReview.gangId) throw new Error('IMPORT_WRITE_UNVERIFIED');
+      const records = await PandillasService.getAllGangs();
+      const matches = records.filter(item => item.id === dossierReview.gangId);
+      if (matches.length !== 1 || !verifyDossierImportWrite(result, matches[0], dossierReview.expectedUpdatedAt)
+        || context !== dossierContext.current) throw new Error('IMPORT_WRITE_UNVERIFIED');
+      loadGangIntoState(matches[0]);
+      dossierReadSequence.current++;
+      setDossierPayload(null); setDossierReview(null); setDossierFile(null);
+      if (dossierFileInput.current) dossierFileInput.current.value = '';
+      setDossierStatus(`IMPORTACIÓN VERIFICADA — Integrantes agregados: ${summary.ADD}; actualizados: ${summary.UPDATE}; sin cambios: ${summary.NO_CHANGE}`);
+    } catch (error) {
+      const code = writeSucceeded ? 'IMPORT_WRITE_UNVERIFIED' : error instanceof Error ? error.message : 'IMPORT_FAILED';
+      setDossierReview(null); setDossierStatus('ERROR');
+      setDossierError(code === 'PANDILLAS_VERSION_CONFLICT'
+        ? 'El registro cambió después de la previsualización. La importación no fue aplicada. Vuelva a cargar la pandilla y genere una nueva previsualización.'
+        : code === 'PANDILLAS_TARGET_NOT_FOUND' ? 'El registro de pandilla ya no existe. La importación fue cancelada.' : code);
+    } finally { dossierLock.current = false; setDossierBusy(false); }
   };
 
 
@@ -2129,6 +2218,40 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
         {/* TAB 3: MEMBER DOSSIER */}
         {activeTab === "integrantes" && (
           <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div className="lg:col-span-12 bg-slate-900/30 border border-slate-800 rounded-2xl p-4 space-y-2">
+              <h3 className="text-sm font-bold text-slate-200">IMPORTAR DOSSIER INSTITUCIONAL</h3>
+              <label className="block text-sm text-slate-300">Seleccionar archivo JSON (máximo 900 KB)
+                <input ref={dossierFileInput} type="file" accept=".json,application/json" disabled={dossierBusy}
+                  onChange={event => { void selectDossierFile(event.target.files?.[0]); }} className="block mt-2" />
+              </label>
+              {dossierFile && <p className="text-xs text-slate-300">{dossierFile.name} · {dossierFile.size} bytes</p>}
+              {dossierPayload && <p className="text-xs text-slate-300">Pandilla declarada: {dossierPayload.targetGangName} · Registros: {dossierPayload.members.length}</p>}
+              <button type="button" disabled={!dossierTarget || !dossierPayload || dossierBusy}
+                onClick={previewInstitutionalDossier}
+                className="px-4 py-2 rounded-lg bg-slate-800 text-slate-200 disabled:opacity-40">
+                PREVISUALIZAR IMPORTACIÓN
+              </button>
+              <button type="button" disabled={!dossierCanApply || dossierBusy}
+                onClick={() => { void applyInstitutionalDossier(); }}
+                className="ml-2 px-4 py-2 rounded-lg bg-indigo-800 text-white disabled:opacity-40">CONFIRMAR E IMPORTAR</button>
+              <p className="text-xs text-slate-400">Seleccione una pandilla existente de este expediente. Solo importación textual; fotografías deshabilitadas.</p>
+              <p role="status" className="text-sm text-slate-200">{dossierBusy ? 'IMPORTACIÓN EN CURSO' : dossierStatus}</p>
+              {dossierError && <p role="alert" className="text-sm text-red-300">{dossierError}</p>}
+              {dossierReview && (
+                <div role="status" className="text-sm text-slate-200 space-y-1">
+                  <p>Pandilla objetivo: {dossierReview.preview.targetGang}</p>
+                  <p>Integrantes actuales: {dossierReview.preview.existingMemberCount}</p>
+                  <p>ADD: {dossierReview.preview.summary.ADD} · UPDATE: {dossierReview.preview.summary.UPDATE} · NO_CHANGE: {dossierReview.preview.summary.NO_CHANGE} · CONFLICT: {dossierReview.preview.summary.CONFLICT}</p>
+                  <div className="overflow-x-auto"><table className="w-full text-xs text-left">
+                    <thead><tr><th>Nombre</th><th>Acción</th><th>Campos involucrados</th><th>Detalle de conflicto</th></tr></thead>
+                    <tbody>{dossierReview.preview.entries.map((entry, index) => <tr key={index}>
+                      <td>{entry.nombre}</td><td>{entry.action}</td><td>{entry.changedFields.join(', ') || '—'}</td>
+                      <td>{entry.action === 'CONFLICT' ? dossierReview.preview.conflicts.join('; ') : '—'}</td>
+                    </tr>)}</tbody>
+                  </table></div>
+                </div>
+              )}
+            </div>
             {/* MEMBER CAPTURE COLUMN (6 cols) */}
             <div className="lg:col-span-6 bg-slate-900/30 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
               <div className="border-b border-slate-800 pb-2">

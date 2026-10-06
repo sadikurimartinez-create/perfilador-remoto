@@ -153,6 +153,7 @@ export interface GangEntity {
   }[];
 
   createdAt?: number;
+  updatedAt?: number;
   createdBy?: string;
   updatedBy?: string;
   geoReportId?: string;
