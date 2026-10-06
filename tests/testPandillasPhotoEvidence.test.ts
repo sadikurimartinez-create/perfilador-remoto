@@ -14,7 +14,7 @@ const member = { nombre: 'Persona Sintetica', alias: 'Fixture', rol: '', fotogra
 const actor = { institutionalUserId: 'actor-fixture', username: 'Analista Fixture' };
 
 /** Serializable in-memory transactions; queued writes commit only on successful callback. */
-async function fixture() {
+async function fixture(identityOnly = false, memberName = member.nombre) {
   const rows = new Map<string, any>(); let counter = 0; let queue = Promise.resolve(); let failAudit = false;
   const snap = (data: any) => ({ exists: data !== undefined, data: () => data });
   const db: any = {
@@ -39,17 +39,17 @@ async function fixture() {
     },
   };
   rows.set(`projects/${scope.projectId}`, { deleted: false });
-  rows.set(`pandillas/${scope.gangId}`, { ...scope, updatedAt: 5, integrantes: [structuredClone(member)] });
+  rows.set(`pandillas/${scope.gangId}`, { ...scope, updatedAt: 5, integrantes: [identityOnly ? { nombre: memberName } : { ...structuredClone(member), nombre: memberName }] });
   const asset: any = { id: 'document-fixture', projectId: scope.projectId, sourceDocumentId: 'pdf-fixture', sourceDocumentName: 'Fuente Sintetica', sourceDocumentSha256: hash, sourcePage: 1, sourceImageId: 'image-fixture', status: 'ACTIVE', createdAt: 10, createdBy: actor, version: 1,
     original: { storagePath: photoStoragePath({ projectId: scope.projectId, assetId: 'document-fixture', sha256: hash, ext: 'png' }), sha256: hash, mimeType: 'image/png', size: 100, width: 200, height: 300 },
     derived: { storagePath: photoStoragePath({ projectId: scope.projectId, assetId: 'document-fixture', sha256: hash, ext: 'jpg', recipeVersion: 'v1' }), sha256: hash, mimeType: 'image/jpeg', size: 80, width: 100, height: 150, recipeVersion: 'v1' } };
-  rows.set(`projects/${scope.projectId}/documents/document-fixture`, { id: 'document-fixture', projectId: scope.projectId, photoAsset: asset, multimodalEvidence: { expedienteId: scope.projectId, documentId: 'document-fixture', humanValidationStatus: 'APPROVED', forensicIntegrity: { rawSha256: hash, hashStatus: 'REAL_FILE_HASH' } } });
+  if (!identityOnly) rows.set(`projects/${scope.projectId}/documents/document-fixture`, { id: 'document-fixture', projectId: scope.projectId, photoAsset: asset, multimodalEvidence: { expedienteId: scope.projectId, documentId: 'document-fixture', humanValidationStatus: 'APPROVED', forensicIntegrity: { rawSha256: hash, hashStatus: 'REAL_FILE_HASH' } } });
   const deps: any = { database: () => db, now: () => 100, uuid: () => `opaque-${++counter}`, authorize: jest.fn(async () => ({ allowed: true, actor })) };
-  const identity = await mutate('fixture-session', { ...scope, operation: 'CREATE_IDENTITY', expectedVersion: 0, expectedGangUpdatedAt: 5, legacyMemberName: member.nombre, reason: 'Revision documental sintetica' }, deps);
+  const identity = await mutate('fixture-session', { ...scope, operation: 'CREATE_IDENTITY', expectedVersion: 0, expectedGangUpdatedAt: 5, legacyMemberName: memberName, reason: 'Revision documental sintetica' }, deps);
   const associate = (extra: any = {}) => mutate('fixture-session', { ...scope, operation: 'ASSOCIATE', expectedVersion: 0, expectedDocumentVersion: 1, reason: 'Asociacion documental', memberIdentityId: identity.id, documentId: 'document-fixture', imageType: 'MEMBER_PRIMARY_PHOTO', associationLevel: 'EXACT', associationBasis: 'Ficha nominal sintetica', sourcePage: 1, sourceImageId: 'image-fixture', ...extra }, deps);
-  const association = await associate();
-  const select = (extra: any = {}) => mutate('fixture-session', { ...scope, operation: 'SELECT_PRIMARY', memberIdentityId: identity.id, associationId: association.id, expectedVersion: 0, expectedAssociationVersion: 1, expectedDocumentVersion: 1, reason: 'Eleccion humana sintetica', ...extra }, deps);
-  return { rows, deps, identity, association, associate, select, asset, failAudit: () => { failAudit = true; }, resolve: () => resolve('fixture-session', { ...scope, memberIdentityId: identity.id }, deps), associationPath: `projects/${scope.projectId}/pandillasPhotoAssociations/${association.id}`, identityPath: `projects/${scope.projectId}/pandillasMemberIdentities/${identity.id}`, documentPath: `projects/${scope.projectId}/documents/document-fixture` };
+  const association = identityOnly ? null : await associate();
+  const select = (extra: any = {}) => mutate('fixture-session', { ...scope, operation: 'SELECT_PRIMARY', memberIdentityId: identity.id, associationId: association!.id, expectedVersion: 0, expectedAssociationVersion: 1, expectedDocumentVersion: 1, reason: 'Eleccion humana sintetica', ...extra }, deps);
+  return { rows, deps, identity, association: association!, associate, select, asset, failAudit: () => { failAudit = true; }, resolve: () => resolve('fixture-session', { ...scope, memberIdentityId: identity.id }, deps), associationPath: `projects/${scope.projectId}/pandillasPhotoAssociations/${association?.id}`, identityPath: `projects/${scope.projectId}/pandillasMemberIdentities/${identity.id}`, documentPath: `projects/${scope.projectId}/documents/document-fixture` };
 }
 test('rutas deterministas, separadas, sin nombres humanos', () => {
   const input = { projectId: 'p', assetId: 'opaque', sha256: hash, ext: 'png' as const };
@@ -75,7 +75,20 @@ test('resolver rechaza documento ausente', async () => { const f = await fixture
 test('legacy permanece intacto', async () => { const f = await fixture(); const before = structuredClone(f.rows.get(`pandillas/${scope.gangId}`)); await f.select(); expect(f.rows.get(`pandillas/${scope.gangId}`)).toEqual(before); expect(before.integrantes[0].fotografiaUrl).toBe('legacy-fixture'); });
 test('cambio de nombre legacy no remapea identidad', async () => { const f = await fixture(); f.rows.get(`pandillas/${scope.gangId}`).integrantes[0].nombre = 'Otro Sintetico'; await expect(f.select()).rejects.toThrow('RECONCILIATION_REQUIRED'); });
 test('identidad verifica versión de pandilla y registro duplicado', async () => { const f = await fixture(); const request: PandillasPhotoMutation = { ...scope, operation: 'CREATE_IDENTITY', expectedVersion: 0, expectedGangUpdatedAt: 4, legacyMemberName: member.nombre, reason: 'Revision' }; await expect(mutate('s', request, f.deps)).rejects.toThrow('GANG_VERSION_CONFLICT'); await expect(mutate('s', { ...request, expectedGangUpdatedAt: 5 }, f.deps)).rejects.toThrow('ALREADY_REGISTERED'); });
-test.each(['Yordi Alejandro Amézquita de la Cruz', 'Yordi Alejandro Amezcuita de la Cruz', 'Ángel Ricardo González Sánchez'])('pendiente R4.3 bloqueado %s', async legacyMemberName => { const f = await fixture(); await expect(mutate('s', { ...scope, operation: 'CREATE_IDENTITY', expectedVersion: 0, expectedGangUpdatedAt: 5, legacyMemberName, reason: 'Revision' }, f.deps)).rejects.toThrow('DOCUMENTARY_IDENTITY_BLOCKED'); });
+test('Yordi canónico crea identidad sin foto, asociación ni primaria', async () => {
+  const f = await fixture(true, 'Yordi Alejandro Amézquita de la Cruz');
+  expect(f.rows.get(f.identityPath)).toMatchObject({ legacyMemberName: 'Yordi Alejandro Amézquita de la Cruz', status: 'ACTIVE', version: 1 });
+  expect([...f.rows.keys()].filter(path => /\/documents\/|\/pandillasPhotoAssociations\/|\/pandillasPrimarySelections\//.test(path))).toHaveLength(0);
+  expect(await f.resolve()).toBeNull();
+});
+test('Ángel Ricardo sigue excluido incluso si el snapshot lo contiene', async () => {
+  await expect(fixture(true, 'Ángel Ricardo González Sánchez')).rejects.toThrow('DOCUMENTARY_IDENTITY_BLOCKED');
+});
+test('primaria exige revisión humana de la asociación EXACT', async () => {
+  const f = await fixture();
+  f.rows.get(f.associationPath).reviewedBy = { institutionalUserId: '', username: '' };
+  await expect(f.select()).rejects.toThrow('NOT_PRIMARY_ELIGIBLE');
+});
 test('sin grant no obtiene DB ni muta', async () => { const f = await fixture(); f.deps.authorize.mockResolvedValue({ allowed: false }); const database = jest.fn(); await expect(resolve('s', { ...scope, memberIdentityId: f.identity.id }, { ...f.deps, database })).rejects.toThrow('ACCESS_DENIED'); expect(database).not.toHaveBeenCalled(); await expect(f.select()).rejects.toThrow('ACCESS_DENIED'); });
 test('proyecto archivado bloquea', async () => { const f = await fixture(); f.rows.get(`projects/${scope.projectId}`).estado = 'ARCHIVADO'; await expect(f.select()).rejects.toThrow('PROJECT_UNAVAILABLE'); });
 test('retirar es versionado, irreversible y no borra activo', async () => { const f = await fixture(); const input: PandillasPhotoMutation = { ...scope, operation: 'RETIRE_ASSOCIATION', associationId: f.association.id, expectedVersion: 1, reason: 'Retiro documental' }; await mutate('s', input, f.deps); expect(f.rows.get(f.associationPath).version).toBe(2); expect(f.rows.has(f.documentPath)).toBe(true); await expect(mutate('s', { ...input, expectedVersion: 2 }, f.deps)).rejects.toThrow('RETIRED'); });

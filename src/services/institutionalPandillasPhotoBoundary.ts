@@ -76,8 +76,8 @@ export async function mutateInstitutionalPandillasPhoto(session: unknown, input:
     if (input.operation === 'CREATE_IDENTITY') {
       expectedPhotoVersion(0, input.expectedVersion); text(input.legacyMemberName);
       if ((gang.updatedAt ?? null) !== input.expectedGangUpdatedAt) throw new Error('R4_GANG_VERSION_CONFLICT');
-      // Excluded R4.3 cases cannot be registered even through this future boundary.
-      if (input.legacyMemberName === 'Ángel Ricardo González Sánchez' || /Yordi Alejandro Am[eé]z[cq]u[i]?ta de la Cruz/i.test(input.legacyMemberName) || input.legacyMemberName === 'Yordi Alejandro Amezcuita de la Cruz') throw new Error('R4_DOCUMENTARY_IDENTITY_BLOCKED');
+      // R4.5D.0 resolves Yordi's name; the out-of-inventory exclusion remains.
+      if (input.legacyMemberName === 'Ángel Ricardo González Sánchez') throw new Error('R4_DOCUMENTARY_IDENTITY_BLOCKED');
       const members = (gang.integrantes || []).filter((member: any) => member.nombre === input.legacyMemberName);
       if (members.length !== 1) throw new Error('R4_LEGACY_MEMBER_NOT_EXACT');
       const fingerprint = await legacyMemberFingerprint(members[0]);

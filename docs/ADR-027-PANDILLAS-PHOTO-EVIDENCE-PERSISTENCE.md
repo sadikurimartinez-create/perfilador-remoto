@@ -45,6 +45,14 @@ criptográfico del snapshot legacy ordenado detecta cambios posteriores; no iden
 personas ni sustituye el ID. Cambios de nombre o del snapshot requieren nueva revisión,
 sin remapeo automático. No se registra de nuevo el mismo fingerprint en la pandilla.
 
+R4.5D.0 resuelve por decisión humana expresa la variante nominal: el nombre canónico
+es Yordi Alejandro Amézquita de la Cruz; Amezcuita queda como referencia documental
+histórica, no como nombre canónico. Se elimina su exclusión de CREATE_IDENTITY.
+MemberPhotoIdentity puede existir sin PhotoAssociation y sin PrimarySelection.
+La resolución del nombre no aprueba ninguna fotografía: cada PhotoAssociation debe
+cumplir las reglas documentales normales y PrimarySelection sigue exigiendo EXACT
+revisada. Las 79 primarias aprobadas se mantienen hasta una nueva aprobación humana.
+
 Asociación independiente: EXACT, PROBABLE_DOCUMENTARY, AMBIGUOUS o NONE;
 ACTIVE o RETIRED. Registro explícito humano y expectedDocumentVersion. Una
 asociación retirada no se modifica. Retirar una primaria exige reemplazarla primero;
@@ -73,7 +81,8 @@ PHOTO_IDENTITY_CREATED, PHOTO_IMPORTED, PHOTO_ASSOCIATED,
 PHOTO_PRIMARY_SELECTED, PHOTO_PRIMARY_REPLACED,
 PHOTO_ASSOCIATION_RETIRED y PHOTO_DELETED tienen contrato tipado.
 Solo los eventos de las operaciones implementadas se generan al invocar el boundary;
-IMPORT/DELETE quedan como contratos, no como endpoints ejecutables en esta fase.
+R4.5E.1 implementa PHOTO_IMPORTED en el servicio server-only de activos;
+DELETE permanece como contrato sin operación ejecutable. No se crea endpoint de carga.
 IDs, versiones, hashes, actor, timestamp, motivo y old/new; sin URL, token, binario
 ni base64. Mutación/auditoría y revisión de fuente se confirman conjuntamente.
 
@@ -87,7 +96,48 @@ No realiza descarga, no acredita bytes reales ni genera enlaces públicos.
 Preservar original y derivado aprobado inmutables; futuras rutas:
 projects/{projectId}/pandillas/evidence/assets/{assetId}/original/{sha256}.{ext}
 projects/{projectId}/pandillas/evidence/assets/{assetId}/derived/{recipeVersion}/{sha256}.{ext}
-storage.rules permanece cerrado para estas rutas. No hay uploader/registrador de activos.
+storage.rules permanece cerrado para estas rutas. R4.5E.1 incorpora
+registerInstitutionalPandillasPhotoAsset, sin activar clientes, endpoints ni carga real.
+
+## Uploader y registrador R4.5E.1
+
+El servicio exige sesión y grant WRITE mediante authorizeInstitutionalProjectAccess,
+sin bypass por rol. Relee proyecto disponible (incluido lifecycleDeletionPending),
+pandilla y pertenencia antes de cargar y antes de registrar. No crea identidad,
+asociación, selección ni aprobación humana. El ProjectDocument queda PENDING_REVIEW.
+
+Se aceptan PNG/JPEG originales y derivados ya certificados, sin recomprimir.
+Se validan firma, cierre, dimensiones codificadas antes de decode, decode completo,
+límites y SHA-256 real de ambos buffers mediante forensicFileIntegrity.ts.
+validatePhotoAsset mantiene las restricciones de dimensiones, crop y rutas existentes.
+La procedencia PDF se conserva en photoAsset sin volver a subir el PDF.
+VALID es una condición técnica de aceptación; no se añade un campo validationStatus
+al contrato. La aprobación documental es una transición humana independiente.
+
+assetId/documentId es opaco y determinístico: SHA-256 de la tupla JSON
+[projectId, originalSha256, derivedSha256, recipeVersion], prefijado asset-.
+No representa identidad personal. La misma tupla reutiliza documento y objetos
+solo si toda la procedencia y metadata coinciden; diferente página, IMAGE_ID,
+PDF, crop o estado es conflicto. No se deduplican fotografías por apariencia.
+
+Storage usa Admin con credenciales dedicadas existentes; Rules no autorizan Admin,
+por lo que el servicio aplica el grant institucional antes de obtener el bucket.
+No se amplía acceso cliente READ/WRITE ni se generan URLs públicas o tokens.
+Cada objeto se crea con ifGenerationMatch=0 y verificación CRC32C. El readback
+verifica bytes SHA-256, tamaño, MIME y generación estable; un objeto discrepante
+no se sobrescribe. La autorización se verifica otra vez tras el upload.
+
+Firestore y Storage no son una transacción conjunta. Si falla derived después
+del original, el original se conserva y el reintento verifica/reutiliza ese objeto.
+Si falla Firestore tras ambos objetos, el reintento reutiliza ambos y reintenta
+el registro. No se borran objetos como rollback. Si existe documento pero falta
+un objeto, se informa R4_REGISTERED_OBJECT_MISSING: requiere reconciliación,
+sin reparación silenciosa ni modificación del documento existente.
+
+Registro ProjectDocument.photoAsset, PHOTO_IMPORTED y revisión institucional del
+proyecto se confirman juntos en transacción, leyendo antes de escribir. Un registro
+concurrente compatible se reutiliza sin duplicar auditoría; uno incompatible falla.
+Esta recuperación idempotente no sustituye la futura saga de eliminación ADR-011.
 
 ADR-011 distingue quitar primaria, retirar asociación y borrar físicamente. No se
 implementa borrado R4; no reutilizar el borrado de un único storagePath para purgar
@@ -104,9 +154,10 @@ revisión/autoridad institucional; no duplica base64 ni inventa geographyId para
 ## Migración futura y exclusiones
 
 No inicializar 80 identidades, extraer PDF, subir objetos, asociar 79 candidatos,
-elegir fotografías reales, resolver Amézquita/Amezcuita, incorporar Ángel Ricardo
+elegir fotografías reales, incorporar Ángel Ricardo
 González Sánchez, desplegar reglas, cambiar Word/PDF/UI, migrar legacy ni hacer commit.
-El boundary bloquea explícitamente los pendientes R4.3 de identidad. Los múltiples
+El boundary mantiene la exclusión de identidad de Ángel Ricardo González Sánchez,
+fuera del inventario. La exclusión nominal de Yordi fue levantada por R4.5D.0. Los múltiples
 EXACT requieren selección humana, sin ranking facial ni inferencias por apariencia.
 
 Fases siguientes: revisar este contrato y sus tests; carga/verificación server-side de
