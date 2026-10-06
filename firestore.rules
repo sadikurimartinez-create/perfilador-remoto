@@ -47,11 +47,16 @@ service cloud.firestore {
           'lifecycleDeletionPending', 'sweeps'
         ]);
       match /{child}/{documentId} {
+        // R4 metadata: existing institutional READ grant; server-only mutations.
+        allow read: if child in ['pandillasMemberIdentities', 'pandillasPhotoAssociations', 'pandillasPrimarySelections']
+          && projectAccess(projectId, 'READ') && resource.data.projectId == projectId;
         allow read: if child in ['photos', 'documents', 'streetview_findings', 'geographicEntities',
           'denueAnalyticalRelations', 'denueAnalyticalReviewEvents', 'geoint_temporal_comparisons',
           'reportPackages', 'reportCertifications', 'reportPublications'] && projectAccess(projectId, 'READ');
-        allow create: if child in ['photos', 'documents'] && projectAccess(projectId, 'WRITE');
+        allow create: if child in ['photos', 'documents'] && projectAccess(projectId, 'WRITE')
+          && !('photoAsset' in request.resource.data);
         allow update: if child in ['photos', 'documents'] && projectAccess(projectId, 'WRITE')
+          && !('photoAsset' in resource.data) && !('photoAsset' in request.resource.data)
           && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['deleted', 'deletedBy', 'deletedAt', 'expiresAt', 'lifecycleDeletionPending']);
         // Critical GEOINT entity writes/deletes require atomic server outbox/audit.
         // DENUE base relations and human review events commit with server-bound identity/audit.

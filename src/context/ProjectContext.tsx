@@ -340,6 +340,8 @@ export type AnalysisResult = {
 };
 
 export type ProjectDocument = {
+  /** R4 asset metadata; registration/upload are deliberately not enabled in this phase. */
+  photoAsset?: import('@/modules/pandillas/photo-evidence/contracts').PhotoAsset;
   id: string;
   name: string;
   url: string;
