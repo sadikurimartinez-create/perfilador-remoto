@@ -54,7 +54,8 @@ function encodedDimensions(b: Buffer, mime: string): { width: number; height: nu
   throw new Error('R4_IMAGE_INVALID');
 }
 
-async function validateBytes(input: FileInput, derived: boolean) {
+/** Shared read-only validator. It does not obtain Admin/Storage or persist bytes. */
+export async function validatePandillasPhotoBytes(input: FileInput, derived: boolean) {
   if (!(input.bytes instanceof Uint8Array) || input.bytes.length === 0 || input.bytes.length > (derived ? 2 : 20) * 1024 * 1024) throw new Error('R4_FILE_LIMIT');
   photoHash(input.sha256);
   if (!['image/png', 'image/jpeg'].includes(input.mimeType) || detectMimeFromMagicBytes(input.bytes) !== input.mimeType) throw new Error('R4_MIME_MISMATCH');
@@ -81,6 +82,16 @@ function sameAsset(actual: PhotoAsset, wanted: PhotoAsset) {
   if (comparable(actual) !== comparable(wanted)) throw conflict();
 }
 
+/** Read-only verification shared by readiness and the post-upload registrar. */
+export async function verifyPandillasStoredPhotoFile(bucket: ReturnType<typeof getInstitutionalAdminBucket>, metadata: PhotoAsset['original'], storedMetadata?: any) {
+  const object = bucket.file(metadata.storagePath);
+  const stored = storedMetadata ?? (await object.getMetadata())[0];
+  if (!stored.generation || stored.contentType !== metadata.mimeType || Number(stored.size) !== metadata.size) throw conflict();
+  const [readback] = await object.download();
+  const [after] = await object.getMetadata();
+  if (after.generation !== stored.generation || readback.length !== metadata.size || await computeSha256FromBytes(readback) !== metadata.sha256) throw conflict();
+}
+
 /** No association/primary or approval is created by importing an asset. */
 export async function registerInstitutionalPandillasPhotoAsset(session: unknown, input: PandillasPhotoAssetInput, overrides: Partial<PhotoAssetDependencies> = {}) {
   if (typeof window !== 'undefined') throw new Error('R4_UPLOAD_SERVER_ONLY');
@@ -91,8 +102,8 @@ export async function registerInstitutionalPandillasPhotoAsset(session: unknown,
   const access = await deps.authorize({ sessionToken: session, projectId: input.projectId, action: 'WRITE' });
   if (!access.allowed) throw new Error('R4_ACCESS_DENIED');
   const actor: PhotoActor = { institutionalUserId: access.actor.institutionalUserId, username: access.actor.username };
-  const original = await validateBytes(input.original, false);
-  const derived = await validateBytes(input.derived, true);
+  const original = await validatePandillasPhotoBytes(input.original, false);
+  const derived = await validatePandillasPhotoBytes(input.derived, true);
   const key = await computeSha256FromBytes(new TextEncoder().encode(JSON.stringify([input.projectId, original.sha256, derived.sha256, input.derived.recipeVersion])));
   const assetId = `asset-${key}`; // Opaque content-addressed asset, never personal identity.
   const file = (f: typeof original, recipeVersion?: string) => ({ storagePath: photoStoragePath({ projectId: input.projectId, assetId, sha256: f.sha256, ext: f.mimeType === 'image/png' ? 'png' : 'jpg', recipeVersion }), sha256: f.sha256, mimeType: f.mimeType, size: f.size, width: f.width, height: f.height });
@@ -126,10 +137,7 @@ export async function registerInstitutionalPandillasPhotoAsset(session: unknown,
       catch (failure: any) { if (failure.code !== 412) throw failure; }
       [stored] = await object.getMetadata();
     }
-    if (!stored.generation || stored.contentType !== metadata.mimeType || Number(stored.size) !== metadata.size) throw conflict();
-    const [readback] = await object.download();
-    const [after] = await object.getMetadata();
-    if (after.generation !== stored.generation || readback.length !== metadata.size || await computeSha256FromBytes(readback) !== metadata.sha256) throw conflict();
+    await verifyPandillasStoredPhotoFile(bucket, metadata, stored);
   };
   await ensureObject(asset.original, original.bytes, !prior.doc);
   await ensureObject(asset.derived!, derived.bytes, !prior.doc);

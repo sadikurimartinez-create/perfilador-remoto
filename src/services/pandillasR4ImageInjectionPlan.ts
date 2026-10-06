@@ -66,7 +66,8 @@ export type R4PlanSnapshot = { project: any; gangs: any[]; identities: any[]; do
 type PlanItem = { gangName: string; memberName: string; status: 'READY' | 'BLOCKED'; actions: string[];
   error?: string; auditEvents?: PhotoAuditEventType[]; requiresHumanApproval?: boolean;
   expectedVersions?: { expectedVersion: number; expectedGangUpdatedAt: number | null; asset: number; association: number; primary: number } };
-export async function buildR4InjectionPlan(body: R4InjectionBody, snapshot: R4PlanSnapshot, actor: PhotoActor) {
+export async function buildR4InjectionPlan(body: R4InjectionBody, snapshot: R4PlanSnapshot, actor: PhotoActor,
+  readiness?: { humanApprovalVerified: (item: R4InjectionItem) => boolean }) {
   if (body.mode !== 'DRY_RUN') fail('R4_LIVE_EXECUTION_NOT_ENABLED', 409);
   const { project, gangs, identities, documents, associations, selections } = snapshot;
   if (!project || project.deleted !== undefined && project.deleted !== false || project.estado === 'ARCHIVADO'
@@ -86,6 +87,7 @@ export async function buildR4InjectionPlan(body: R4InjectionBody, snapshot: R4Pl
     const gang = gangs.find(g => g.nombre === item.gangName)!;
     const actions: string[] = [], auditEvents: PhotoAuditEventType[] = [];
     try {
+      const humanApprovalVerified = readiness?.humanApprovalVerified(item) === true;
       photoId(gang.id);
       if (gang.updatedAt != null && (!Number.isSafeInteger(gang.updatedAt) || gang.updatedAt < 0)) throw new Error();
       const fingerprint = await legacyMemberFingerprint(gang.integrantes.find((m: any) => m.nombre === item.memberName));
@@ -114,7 +116,8 @@ export async function buildR4InjectionPlan(body: R4InjectionBody, snapshot: R4Pl
           || document.multimodalEvidence?.documentId !== document.id || document.multimodalEvidence?.expedienteId !== body.projectId
           || document.multimodalEvidence?.forensicIntegrity?.rawSha256 !== item.originalSha256
           || document.multimodalEvidence?.forensicIntegrity?.hashStatus !== 'REAL_FILE_HASH'
-          || document.multimodalEvidence?.humanValidationStatus !== 'APPROVED') throw new Error();
+          || document.multimodalEvidence?.humanValidationStatus !== 'APPROVED'
+            && !(humanApprovalVerified && document.multimodalEvidence?.humanValidationStatus === 'PENDING_REVIEW')) throw new Error();
       }
       const related = identity ? associations.filter(a => a.memberIdentityId === identity.id && a.imageType === 'MEMBER_PRIMARY_PHOTO' && a.status === 'ACTIVE') : [];
       const associationMatches = related.filter(a => a.documentId === document?.id);
@@ -129,6 +132,7 @@ export async function buildR4InjectionPlan(body: R4InjectionBody, snapshot: R4Pl
       if (primaryMatches.length > 1) throw new Error();
       const primary = primaryMatches[0] as MemberPrimaryPhotoSelection | undefined;
       if (primary) {
+        if (document?.multimodalEvidence?.humanValidationStatus !== 'APPROVED') throw new Error();
         if (!association || primary.associationId !== association.id) throw new Error(); // Never replace a primary in this phase.
         expectedPhotoVersion(primary.version, primary.version); if (primary.version < 1) throw new Error();
         resolvePrimaryPhotoMetadata(body.projectId, gang.id, identity!.id, identity!, primary, association!, document);
@@ -151,7 +155,7 @@ export async function buildR4InjectionPlan(body: R4InjectionBody, snapshot: R4Pl
           memberIdentityId: identity?.id ?? null, assetId: asset?.id ?? null, oldValue: null, newValue: null, reason: body.batchLabel }); auditEvents.push(event); }
       }
       items.push({ gangName: item.gangName, memberName: item.memberName, status: 'READY', actions, auditEvents,
-        requiresHumanApproval: !asset || !association,
+        requiresHumanApproval: !humanApprovalVerified && (!asset || !association),
         expectedVersions: { ...identityMutation, asset: asset?.version ?? 0, association: association?.version ?? 0, primary: primary?.version ?? 0 } });
     } catch {
       items.push({ gangName: item.gangName, memberName: item.memberName, status: 'BLOCKED', actions: [], error: 'R4_PERSISTED_STATE_CONFLICT' });
