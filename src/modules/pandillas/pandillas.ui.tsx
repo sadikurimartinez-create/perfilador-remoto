@@ -14,6 +14,7 @@ import {
   calculateSimilarity
 } from "./pandillas.mapper";
 import { PandillasService } from "./pandillas.service";
+import { DossierPrimaryPhoto, useDossierPrimaryPhotoUrls } from './components/DossierPrimaryPhoto';
 import { parseAndValidateDossierImportPayload, reviewDossierImport, canApplyDossierImport,
   buildDossierImportResult, verifyDossierImportWrite, type DossierImportPayload, type DossierImportReview, parseAndValidateR3Payload, reviewR3Update, canApplyR3Update, buildR3UpdateResult, type R3DossierPayload, type R3Review } from "./pandillasDossierImport";
 import { PandillasEngine } from "./pandillas.engine";
@@ -390,6 +391,8 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
 
   // --- INTERACTION & EDITING SUB-STATES ---
   const [activeTab, setActiveTab] = useState<"dashboard" | "registro" | "integrantes" | "relaciones" | "geointeligencia" | "barridos" | "gip">("dashboard");
+  const dossierPrimaryUrls = useDossierPrimaryPhotoUrls(projectId || activeProject?.id, selectedGangId, integrantes,
+    activeTab === 'integrantes' && !!dossierTarget && !!user, username);
 
   // --- NEW GOVERNANCE GIP STATES ---
   const [candidates, setCandidates] = useState<GangMemberCandidate[]>([]);
@@ -2626,11 +2629,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
                     >
                       {/* Avatar Photo */}
                       <div className="w-16 h-16 rounded-lg bg-slate-900 border border-slate-800 overflow-hidden flex items-center justify-center flex-shrink-0 relative">
-                        {m.fotografiaUrl ? (
-                          <img src={m.fotografiaUrl} className="w-full h-full object-cover" alt={m.alias || m.nombre} />
-                        ) : (
-                          <span className="text-2xl">{m.sexo === "Femenino" ? "👩" : "👨"}</span>
-                        )}
+                        <DossierPrimaryPhoto primaryUrl={dossierPrimaryUrls[idx]} legacyUrl={m.fotografiaUrl} sex={m.sexo} alt={m.alias || m.nombre} />
                         {/* Peligrosidad badge overlay */}
                         <div className="absolute bottom-0 inset-x-0 text-center bg-slate-950/80 text-[8px] font-black text-sky-400">
                           {m.peligrosidadCalculada}%

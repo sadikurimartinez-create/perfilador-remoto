@@ -12,6 +12,9 @@ import { resolvePrimaryPhotoMetadata } from '@/modules/pandillas/photo-evidence/
 import { assertPhotoAuditSafe } from '@/modules/pandillas/photo-evidence/audit';
 import type { PhotoAsset } from '@/modules/pandillas/photo-evidence/contracts';
 import type { MultimodalEvidenceContract } from '@/utils/multimodalEvidenceContract';
+import { getInstitutionalAdminBucket } from '@/lib/firebaseAdmin';
+import { ProjectAccessError } from '@/types/institutionalProjectAccess';
+import { verifyPandillasStoredPhotoFile } from './institutionalPandillasPhotoAssetService';
 
 type Scope = { projectId: string; gangId: string };
 export type PandillasPhotoMutation = Scope & { expectedVersion: number; reason: string } & (
@@ -151,4 +154,86 @@ export async function resolveMemberPrimaryPhoto(session: unknown, input: Scope &
     if (document.multimodalEvidence.humanValidationStatus !== 'APPROVED') throw new Error('R4_DOCUMENT_NOT_REVIEWED');
     return resolvePrimaryPhotoMetadata(input.projectId, input.gangId, input.memberIdentityId, identity, selection, association, document);
   });
+}
+
+/** Dossier batch adapter for the existing resolver. No mutation, upload or legacy patch.
+ * Reads identities once, then selections/associations/documents with grouped getAll. */
+export async function resolveGangPrimaryPhotoUrls(session: unknown, input: Scope,
+  overrides: Partial<Dependencies> & { bucket?: typeof getInstitutionalAdminBucket } = {}) {
+  const deps = { ...defaults, ...overrides };
+  photoId(input.projectId); photoId(input.gangId);
+  const grant = await deps.authorize({ sessionToken: session, projectId: input.projectId, action: 'READ' });
+  if (!grant.allowed) throw new ProjectAccessError(grant.code);
+  const db = deps.database();
+  const resolved = await db.runTransaction(async tx => {
+    const { project, gang } = await context(db, tx, input);
+    if (project.lifecycleDeletionPending || gang.lifecycleDeletionPending || !Array.isArray(gang.integrantes)
+      || gang.integrantes.length > 200) throw new Error('R4_DOSSIER_UNAVAILABLE');
+    const identities = await tx.get(db.collection(collection(input.projectId, 'Identities')).where('gangId', '==', input.gangId).limit(201));
+    if (identities.size > 200) throw new Error('R4_DOSSIER_CAPACITY');
+    const rows = identities.docs.map(doc => ({ ...doc.data(), _documentId: doc.id })) as Array<MemberPhotoIdentity & { _documentId: string }>;
+    const valid = rows.filter(row => row.id === row._documentId && row.projectId === input.projectId && row.gangId === input.gangId && row.status === 'ACTIVE');
+    const getAll = async (paths: string[]) => {
+      const unique = [...new Set(paths)];
+      if (!unique.length) return new Map<string, any>();
+      return new Map((await tx.getAll(...unique.map(path => db.doc(path)))).map(doc => [doc.id, doc.exists ? doc.data() : undefined]));
+    };
+    const selections = await getAll(valid.map(row => `${collection(input.projectId, 'Selections')}/${primarySelectionId(input.gangId, row.id)}`));
+    const associationIds = [...selections.values()].filter(row => row && typeof row.associationId === 'string').map(row => row.associationId)
+      .filter(id => { try { photoId(id); return true; } catch { return false; } });
+    const associations = await getAll(associationIds.map(id => `${collection(input.projectId, 'Associations')}/${id}`));
+    const documentIds = [...associations.values()].filter(row => row && typeof row.documentId === 'string').map(row => row.documentId)
+      .filter(id => { try { photoId(id); return true; } catch { return false; } });
+    const documents = await getAll(documentIds.map(id => `projects/${input.projectId}/documents/${id}`));
+    return Promise.all(gang.integrantes.map(async (member: any) => {
+      const memberFingerprint = await legacyMemberFingerprint(member);
+      const fallback = { memberFingerprint, memberId: null as string | null, photo: null as ReturnType<typeof resolvePrimaryPhotoMetadata>, derivedSize: 0 };
+      // The image injection deliberately excludes these documentary identities.
+      const normalized = String(member.nombre).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+      if (/yordi alejandro|angel ricardo gonzalez sanchez/.test(normalized)) return fallback;
+      // Include invalid/retired rows in ambiguity detection: never choose around an inconsistent binding.
+      const matches = rows.filter(row => row.legacyMemberName === member.nombre || row.legacyMemberFingerprint === memberFingerprint);
+      if (matches.length !== 1) return fallback;
+      const identity = matches[0];
+      try {
+        if (!valid.includes(identity)) return fallback;
+        await verifyLegacyBinding(gang, identity);
+        const selection = selections.get(primarySelectionId(input.gangId, identity.id));
+        if (!selection) return { ...fallback, memberId: identity.id };
+        const association = associations.get(selection.associationId);
+        const document = association && documents.get(association.documentId);
+        if (!document || document.id !== association.documentId || document.multimodalEvidence?.humanValidationStatus !== 'APPROVED'
+          || document.multimodalEvidence?.documentId !== document.id || document.multimodalEvidence?.expedienteId !== input.projectId
+          || document.multimodalEvidence?.forensicIntegrity?.hashStatus !== 'REAL_FILE_HASH'
+          || document.multimodalEvidence?.forensicIntegrity?.rawSha256 !== document.photoAsset?.original?.sha256) return { ...fallback, memberId: identity.id };
+        const photo = resolvePrimaryPhotoMetadata(input.projectId, input.gangId, identity.id, identity, selection, association, document);
+        return { memberFingerprint, memberId: identity.id, photo, derivedSize: document.photoAsset.derived.size };
+      } catch { return fallback; }
+    }));
+  }, { readOnly: true });
+  // Recheck READ after the snapshot and before producing any capability URL.
+  const fresh = await deps.authorize({ sessionToken: session, projectId: input.projectId, action: 'READ' });
+  if (!fresh.allowed) throw new ProjectAccessError(fresh.code);
+  if (fresh.actor.institutionalUserId !== grant.actor.institutionalUserId) throw new ProjectAccessError('PROJECT_ACCESS_DENIED');
+  const expiresAt = deps.now() + 120000;
+  const bucket = resolved.some(row => row.photo) ? (overrides.bucket ?? getInstitutionalAdminBucket)() : null;
+  const items = await Promise.all(resolved.map(async row => {
+    const fallback = { memberId: row.memberId, memberFingerprint: row.memberFingerprint, hasPrimaryPhoto: false, assetId: null as string | null, derivedUrl: null as string | null };
+    if (!row.photo || !bucket) return fallback;
+    try {
+      const file = bucket.file(row.photo.storagePathDerived);
+      const [metadata] = await file.getMetadata();
+      if (metadata.contentType !== row.photo.mimeType || !metadata.generation) return fallback;
+      await verifyPandillasStoredPhotoFile(bucket, { storagePath: row.photo.storagePathDerived, sha256: row.photo.derivedSha256,
+        mimeType: row.photo.mimeType as 'image/jpeg' | 'image/png', size: row.derivedSize, width: row.photo.width, height: row.photo.height }, metadata);
+      const [derivedUrl] = await file.getSignedUrl({ version: 'v4', action: 'read', expires: expiresAt,
+        queryParams: { generation: String(metadata.generation) } });
+      if (!derivedUrl.startsWith('https://')) return fallback;
+      return { ...fallback, hasPrimaryPhoto: true, assetId: row.photo.documentId, derivedUrl };
+    } catch { return fallback; }
+  }));
+  const final = await deps.authorize({ sessionToken: session, projectId: input.projectId, action: 'READ' });
+  if (!final.allowed) throw new ProjectAccessError(final.code);
+  if (final.actor.institutionalUserId !== grant.actor.institutionalUserId) throw new ProjectAccessError('PROJECT_ACCESS_DENIED');
+  return { projectId: input.projectId, gangId: input.gangId, expiresAt, items };
 }
