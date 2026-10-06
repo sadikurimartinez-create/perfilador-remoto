@@ -105,7 +105,7 @@ export function prepareCertifiedR4ReviewRequest(item: R4InjectionItem, document:
 }
 export type R4ReadinessRequest = { body: ReturnType<typeof parseR4InjectionBody>; files?: { original: Uint8Array; derived: Uint8Array };
   receipts?: string[]; previousReceipt?: string };
-export async function parseR4ReadinessMultipart(request: Request): Promise<R4ReadinessRequest> {
+export async function parseR4ReadinessMultipart(request: Request, allowLive = false): Promise<R4ReadinessRequest> {
   // Per-member envelope, bounded below common server request limits. No local paths.
   const reader = request.body?.getReader(); if (!reader) fail('R4_MULTIPART_REQUIRED', 400);
   const chunks: Uint8Array[] = []; let size = 0;
@@ -119,11 +119,13 @@ export async function parseR4ReadinessMultipart(request: Request): Promise<R4Rea
     || ['metadata', 'original', 'derived'].some(key => form.getAll(key).length !== 1)) fail('R4_INVALID_MULTIPART', 400);
   const metadata = form.get('metadata'); if (typeof metadata !== 'string' || Buffer.byteLength(metadata) > 128 * 1024) fail('R4_INVALID_BODY', 400);
   let value: any; try { value = JSON.parse(metadata as string); } catch { return fail('R4_INVALID_BODY', 400); }
-  if (value?.mode === 'LIVE') fail('R4_LIVE_EXECUTION_NOT_ENABLED');
-  if (value?.mode !== 'READINESS') fail('R4_INVALID_MODE', 400);
+  const live = value?.mode === 'LIVE';
+  if (live && !allowLive) fail('R4_LIVE_EXECUTION_NOT_ENABLED');
+  if (value?.mode !== 'READINESS' && !live) fail('R4_INVALID_MODE', 400);
   const previousReceipt = value.previousReceipt; delete value.previousReceipt;
   if (previousReceipt !== undefined && typeof previousReceipt !== 'string') fail('R4_READINESS_RECEIPT_INVALID', 400);
-  const body = parseR4InjectionBody({ ...value, mode: 'DRY_RUN' });
+  if (live && !previousReceipt) fail('R4_READINESS_RECEIPT_INVALID', 400);
+  const body = parseR4InjectionBody({ ...value, mode: live ? 'LIVE' : 'DRY_RUN' });
   if (body.batchLabel !== 'R4_PRIMARY_IMAGE_INJECTION_V1' || body.items.length !== 1) fail('R4_READINESS_SINGLE_ITEM_REQUIRED', 400);
   const item = body.items[0]; verifyR4HumanApproval(item);
   const original = form.get('original'), derived = form.get('derived');

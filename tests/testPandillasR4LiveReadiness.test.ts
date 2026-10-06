@@ -137,7 +137,7 @@ test('multipart transport verifies filenames, fields and bytes before issuing a 
     humanApprovalVerified: true, storageReadbackReady: true, storageReadbackPerformed: false, executable: false, writesPerformed: 0 });
   expect(result.items[0].requiresHumanApproval).toBe(false); expect(result.readinessReceipt).toBeTruthy();
 });
-test('multipart cannot carry LIVE', async () => { const response = await POST(multipart({ ...body(), mode: 'LIVE' })); expect((await response.json()).error).toBe('R4_LIVE_EXECUTION_NOT_ENABLED'); });
+test('multipart LIVE requires an actor-bound readiness receipt', async () => { const response = await POST(multipart({ ...body(), mode: 'LIVE' })); expect((await response.json()).error).toBe('R4_READINESS_RECEIPT_INVALID'); });
 test('multipart scope rejects extra fields and payload sizes beyond envelope', async () => {
   const metadata = { ...body(), mode: 'READINESS', extra: true }; await expect(parseR4ReadinessMultipart(multipart(metadata))).rejects.toThrow('R4_INVALID_BODY');
   await expect(parseR4ReadinessMultipart(multipart(undefined, Buffer.alloc(4 * 1024 * 1024)))).rejects.toThrow('R4_MULTIPART_TOO_LARGE');
@@ -158,7 +158,7 @@ test('full batch READINESS validates all signed receipts against current snapsho
   const response = await POST(new NextRequest('https://example.invalid/api/pandillas/r4/image-injection', { method: 'POST',
     headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'READINESS', projectId: pid, batchLabel: 'R4_PRIMARY_IMAGE_INJECTION_V1', receipts }) }));
   const result = await response.json(); expect(response.status).toBe(200); expect(result.readinessForLive).toBe(true);
-  expect(result.bytesValidated).toBe(79); expect(result.liveExecutionEnabled).toBe(false);
+  expect(result.bytesValidated).toBe(79); expect(result.liveExecutionEnabled).toBe(true);
 });
 test('readiness reattempt stable and idempotent; pending review asset uses certificate but never changes persisted review', async () => {
   const item = it(), gang = snapshot.gangs.find(g => g.nombre === item.gangName);

@@ -132,9 +132,9 @@ test.each(['PROBABLE_DOCUMENTARY', 'AMBIGUOUS', 'NONE'])('non-EXACT %s denied', 
   expect((await run(body([{ ...item(), associationLevel }]))).response.status).toBe(400);
 });
 test('non-PRIMARY denied', async () => { expect((await run(body([{ ...item(), selectionType: 'ALBUM' }]))).response.status).toBe(400); });
-test('LIVE hard blocked without snapshot, upload or mutator', async () => {
-  const { response, result } = await run({ ...body(), mode: 'LIVE' }); expect(response.status).toBe(409);
-  expect(result.error).toBe('R4_LIVE_EXECUTION_NOT_ENABLED'); expect(reader).not.toHaveBeenCalled(); expect(database).not.toHaveBeenCalled();
+test('LIVE JSON blocked without physical files, snapshot, upload or mutator', async () => {
+  const { response, result } = await run({ ...body(), mode: 'LIVE' }); expect(response.status).toBe(400);
+  expect(result.error).toBe('R4_LIVE_SINGLE_MULTIPART_REQUIRED'); expect(reader).not.toHaveBeenCalled(); expect(database).not.toHaveBeenCalled();
 });
 test.each([[[]], [Array.from({ length: 80 }, (_, i) => item(i % 79))]])('invalid item count', async items => {
   expect((await run(body(items))).result.error).toBe('R4_INVALID_BATCH_SIZE');

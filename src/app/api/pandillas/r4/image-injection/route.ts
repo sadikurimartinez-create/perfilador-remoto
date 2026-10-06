@@ -7,6 +7,7 @@ import { readInstitutionalCollection } from '@/lib/institutionalCollectionAction
 import { getInstitutionalAdminDb, getInstitutionalAdminBucket } from '@/lib/firebaseAdmin';
 import { resolveMemberPrimaryPhoto } from '@/services/institutionalPandillasPhotoBoundary';
 import { verifyPandillasStoredPhotoFile } from '@/services/institutionalPandillasPhotoAssetService';
+import { executeR4Live, verifyR4LiveFinal, R4LiveExecutionError } from '@/services/pandillasR4LiveExecutor';
 import { ProjectAccessError, type InstitutionalActor } from '@/types/institutionalProjectAccess';
 import { parseR4InjectionBody, buildR4InjectionPlan, R4InjectionError, R4_INJECTION_PROJECT_ID, type R4PlanSnapshot } from '@/services/pandillasR4ImageInjectionPlan';
 import { parseR4ReadinessMultipart, parseR4ReadinessBatchRequest, verifyR4HumanApproval, validateR4ReadinessBytes,
@@ -16,8 +17,9 @@ import { parseR4ReadinessMultipart, parseR4ReadinessBatchRequest, verifyR4HumanA
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-// Deliberately fixed in source: neither the body nor environment can enable LIVE.
-const LIVE_EXECUTION_ENABLED = false;
+export const maxDuration = 300;
+// LIVE requires certified multipart bytes and a fresh actor-bound readiness receipt.
+const LIVE_EXECUTION_ENABLED = true;
 const headers = { 'Cache-Control': 'private, no-store, max-age=0', Vary: 'Cookie', 'X-Content-Type-Options': 'nosniff' };
 const MAX_BODY_BYTES = 128 * 1024;
 async function boundedBody(request: NextRequest) {
@@ -58,15 +60,19 @@ export async function POST(request: NextRequest) {
     let readiness: R4ReadinessRequest | undefined;
     let body;
     if (request.headers.get('content-type')?.toLowerCase().startsWith('multipart/form-data;')) {
-      readiness = await parseR4ReadinessMultipart(request); body = readiness.body;
+      readiness = await parseR4ReadinessMultipart(request, LIVE_EXECUTION_ENABLED); body = readiness.body;
     } else {
       const value = await boundedBody(request);
+      if (value?.mode === 'VERIFY') {
+        if (Object.keys(value).some(key => !['mode', 'projectId'].includes(key)) || value.projectId !== R4_INJECTION_PROJECT_ID) throw new R4InjectionError('R4_INVALID_BODY');
+        const result = await verifyR4LiveFinal(sessionToken, actor);
+        await access(sessionToken, actor);
+        return response(result);
+      }
       if (value?.mode === 'READINESS') { readiness = parseR4ReadinessBatchRequest(value); body = readiness.body; }
       else body = parseR4InjectionBody(value);
     }
-    if (body.mode === 'LIVE' && !LIVE_EXECUTION_ENABLED) throw new R4InjectionError('R4_LIVE_EXECUTION_NOT_ENABLED', 409);
-    // No live executor exists in this phase, even beyond the fixed guard.
-    if (body.mode !== 'DRY_RUN') throw new R4InjectionError('R4_LIVE_EXECUTION_NOT_ENABLED', 409);
+    if (body.mode === 'LIVE' && !readiness?.files) throw new R4InjectionError('R4_LIVE_SINGLE_MULTIPART_REQUIRED', 400);
     const projects = await readInstitutionalCollection('projects');
     const gangs = await readInstitutionalCollection('pandillas');
     const matching = projects.filter(project => (project.deleted === undefined || project.deleted === false)
@@ -98,6 +104,9 @@ export async function POST(request: NextRequest) {
         associations: await rows(projectRef.collection('pandillasPhotoAssociations'), 1000),
         selections: await rows(projectRef.collection('pandillasPrimarySelections'), 1000) };
     }, { readOnly: true });
+    if (body.mode === 'LIVE') {
+      return response(await executeR4Live(sessionToken, actor, body, snapshot, readiness!.files!, readiness!.previousReceipt));
+    }
     if (readiness?.previousReceipt) verifyR4ReadinessReceipt(readiness.previousReceipt, actor.institutionalUserId, snapshot);
     const byteProof = readiness?.files ? await validateR4ReadinessBytes(body.items[0], readiness.files.original, readiness.files.derived) : null;
     const batchProof = readiness?.receipts ? verifyR4ReadinessBatch(readiness.receipts, actor.institutionalUserId, snapshot) : null;
@@ -132,16 +141,18 @@ export async function POST(request: NextRequest) {
         approvalDigest: byteProof?.approvalDigest ?? batchProof?.approvalDigest,
         livePreconditionReady: true, livePreconditionFingerprint: r4LivePreconditionFingerprint(snapshot),
         storageReadbackReady: storageAvailable, storageReadbackPerformed: existingAssetsReadBack > 0, existingAssetsReadBack,
-        idempotentResumeReady: plan.response.ok, executable: false, liveExecutionEnabled: false, writesPerformed: 0,
+        idempotentResumeReady: plan.response.ok, executable: false, liveExecutionEnabled: LIVE_EXECUTION_ENABLED, writesPerformed: 0,
         readinessReceipt: ready && byteProof ? createR4ReadinessReceipt(body.items[0], actor.institutionalUserId, snapshot) : null,
         // Readback is enforced by the existing uploader, after each future upload.
-        deferredValidations: ['LIVE_ENABLEMENT', 'LIVE_AUTHORIZATION_AND_VERSION_RECHECK', 'POST_UPLOAD_STORAGE_READBACK'],
+        deferredValidations: ['LIVE_AUTHORIZATION_AND_VERSION_RECHECK', 'POST_UPLOAD_STORAGE_READBACK'],
         items: plan.response.items.map(item => ({ ...item, humanApprovalVerified: item.status === 'READY',
           requiresHumanApproval: false, reviewImportRequiredBeforePrimary: item.actions.includes('CREATE_ASSET') || item.actions.includes('CREATE_PRIMARY') })) },
         ready ? 200 : 409);
     }
     return response(plan.response, plan.response.ok ? 200 : 409);
   } catch (error) {
+    if (error instanceof R4LiveExecutionError) return response({ ok: false, error: error.code, status: 'FAILED',
+      writesPerformed: error.writesPerformed, completedStages: error.completedStages, partialWritesPossible: true, liveExecutionEnabled: true }, error.status);
     if (error instanceof R4InjectionError) return response({ ok: false, error: error.code, writesPerformed: 0, liveExecutionEnabled: false }, error.status);
     const code = error instanceof ProjectAccessError ? error.code : null;
     const status = code === 'PROJECT_ACCESS_UNAUTHENTICATED' || code === 'PROJECT_ACCESS_IDENTITY_NOT_FOUND' ? 401
