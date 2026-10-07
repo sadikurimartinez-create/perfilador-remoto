@@ -5,6 +5,7 @@ import { reviewInstitutionalEvidence } from "@/lib/institutionalGeointEntityActi
 import type { HumanValidationAction } from "@/utils/humanValidationPolicy";
 import { createEvidenceReviewSubmission, evidenceImageReference, ppcReviewDisplayStatus, reviewStateLabels, reviewVersion } from "@/utils/institutionalEvidenceReview";
 import { hasStreetViewProvenance } from "@/utils/visualEvidenceEngine/streetViewCollector";
+import { isCertifiedR4PhotoEvidence, isCertifiedR4FinalReview, resolveCertifiedR4PpcImage } from '@/utils/certifiedR4PhotoReview';
 
 export function PhotoPpcReviewPanel() {
   const { project, album, isReadOnly } = useProject();
@@ -27,13 +28,29 @@ export function EvidencePpcReviewCard({ projectId, item, readOnly, onConfirmed, 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(false);
   const [inspect, setInspect] = useState(false);
-  const [availability, setAvailability] = useState("DISPONIBILIDAD_NO_COMPROBADA");
+  const [availability, setAvailability] = useState("Disponibilidad aún no comprobada");
+  const [resolvedImage, setResolvedImage] = useState('');
+  const resolution = useRef(0);
+  const scope = `${projectId}/${item.id}`;
+  const currentScope = useRef(scope); currentScope.current = scope;
   const submission = useRef(createEvidenceReviewSubmission(save));
   const current = confirmed || item;
   const status = ppcReviewDisplayStatus(current);
-  const image = evidenceImageReference(current);
+  const certified = isCertifiedR4PhotoEvidence(current);
+  const finalReview = isCertifiedR4FinalReview(current);
+  const image = certified ? resolvedImage : evidenceImageReference(current);
+  async function inspectImage() {
+    setInspect(true);
+    if (!certified) { setAvailability('Cargando imagen'); return; }
+    const attempt = ++resolution.current;
+    setResolvedImage(''); setAvailability('Cargando imagen');
+    try {
+      const url = await resolveCertifiedR4PpcImage(projectId, current.sourceDocumentId || current.id);
+      if (attempt === resolution.current && scope === currentScope.current) setResolvedImage(url);
+    } catch { if (attempt === resolution.current && scope === currentScope.current) setAvailability('NO_DISPONIBLE'); }
+  }
   async function decide(action: HumanValidationAction) {
-    if (readOnly || saving || confirmed || !comment.trim() || !current.reviewTarget || submission.current.isPending()) return;
+    if (readOnly || finalReview || saving || confirmed || !comment.trim() || !current.reviewTarget || submission.current.isPending()) return;
     setSaving(true); setError(false);
     try {
       await submission.current.submit({ projectId, ...current.reviewTarget, action, comment, expectedReview: reviewVersion(current) }, result => {
@@ -46,19 +63,20 @@ export function EvidencePpcReviewCard({ projectId, item, readOnly, onConfirmed, 
     <p>{hasStreetViewProvenance(current) || ["TACTICAL_STREET_VIEW", "STREETVIEW_FINDING"].includes(current.reviewTarget?.source) ? "Street View" : "Fotografía"} · {current.reviewTarget?.id}</p>
     <p role="status">Estado PPC: {reviewStateLabels[status]}</p>
     <p className="text-xs text-slate-400">Fuente: {current.sourceProvider || current.fuente || current.gpsSource || "No acreditada"} · Fecha: {String(current.streetViewMetadata?.captureDate || current.createdAt || current.fechaCreacion || "No acreditada")}</p>
-    {current.validatedAt && <p className="text-xs">Revisión: {current.validatedBy?.name || "Identidad institucional"} · {current.validatedAt}</p>}
+    {current.validatedAt && <p className="text-xs">Revisión: {current.validatedBy?.name || current.validatedBy?.username || current.validatedBy?.id || "Identidad institucional"} · {current.validatedAt}</p>}
     {current.validationComment && <p className="text-xs">Motivo: {current.validationComment}</p>}
-    <button type="button" onClick={() => setInspect(true)} disabled={!image}>Ver imagen</button>
+    {finalReview && <p className="text-xs">Decisión institucional certificada. Revisión cerrada. · {current.validationSource}</p>}
+    <button type="button" onClick={inspectImage} disabled={!certified && !image}>Ver imagen</button>
     {inspect && image && <img src={image} alt="Recurso en revisión PPC" loading="lazy" referrerPolicy="no-referrer"
-      onLoad={() => setAvailability("IMAGEN_DISPONIBLE")} onError={() => setAvailability("REFERENCIA_ROTA")} className="max-h-48" />}
+      onLoad={() => setAvailability("DISPONIBLE")} onError={() => setAvailability("NO_DISPONIBLE")} className="max-h-48" />}
     <p className="text-xs">{availability}</p>
-    <label className="block">Comentario de revisión
+    {!finalReview && <><label className="block">Comentario de revisión
       <textarea value={comment} disabled={readOnly || saving} onChange={event => setComment(event.target.value)} className="block w-full bg-slate-950" />
     </label>
     <div className="flex flex-wrap gap-3">
       {([ ["APPROVE", "Aprobar"], ["REJECT", "Rechazar"], ["RETURN_FOR_REANALYSIS", "Devolver para reanálisis"] ] as const).map(([action, label]) =>
         <button key={action} type="button" disabled={readOnly || saving || !comment.trim() || Boolean(confirmed)} onClick={() => decide(action)}>{saving ? "Guardando…" : label}</button>)}
-    </div>
+    </div></>}
     {error && <p role="alert">No se confirmó la revisión. Recargue y verifique el estado antes de reintentar.</p>}
   </article>;
 }

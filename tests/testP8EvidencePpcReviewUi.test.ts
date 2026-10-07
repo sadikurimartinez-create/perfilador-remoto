@@ -7,6 +7,8 @@ import { geographicEvidenceCoordinates, geographicEvidenceRole, photoResourceCol
 import * as review from "../src/utils/institutionalEvidenceReview";
 import * as human from "../src/utils/humanValidationPolicy";
 import * as collector from "../src/utils/visualEvidenceEngine/streetViewCollector";
+import * as certified from '../src/utils/certifiedR4PhotoReview';
+import { certifiedR4PhotoFixture } from './helpers/certifiedR4PhotoFixture';
 
 function harness(readOnly = false) {
   let cursor = 0; const slots: any[] = [];
@@ -30,6 +32,7 @@ function harness(readOnly = false) {
     if (name === "@/utils/institutionalEvidenceReview") return review;
     if (name === "@/utils/humanValidationPolicy") return human;
     if (name === "@/utils/visualEvidenceEngine/streetViewCollector") return collector;
+    if (name === '@/utils/certifiedR4PhotoReview') return certified;
     throw new Error(`Unexpected import ${name}`);
   }, record, record.exports);
   const item = { ...context.album[0], reviewTarget: { source: "PHOTO", id: "photo" } };
@@ -43,9 +46,36 @@ function harness(readOnly = false) {
 test("legacy photo shows unreviewed, explicit decisions and no URL/secret text", () => {
   const h = harness(); const html = renderToStaticMarkup(h.render());
   expect(html).toContain("Sin revisar"); expect(html).toContain("Devolver para reanálisis");
-  expect(html).toContain("DISPONIBILIDAD_NO_COMPROBADA");
+  expect(html).toContain("Disponibilidad aún no comprobada");
   expect(html).not.toContain("SECRET_NOT_RENDERED_AS_TEXT");
   expect(h.photoPanel()).not.toBeNull();
+});
+
+test('certified approved R4 has no review controls and retains original metadata', () => {
+  const h = harness(); Object.assign(h.item, certifiedR4PhotoFixture());
+  const before = JSON.stringify(h.item);
+  const html = renderToStaticMarkup(h.render());
+  expect(html).toContain('Aprobada'); expect(html).toContain('Certified decision and retained original digest');
+  expect(html).toContain('2026-10-06T12:00:00Z');
+  expect(html).not.toMatch(/Aprobar|Rechazar|Devolver para reanálisis|textarea/);
+  expect(JSON.stringify(h.item)).toBe(before); expect(h.save).not.toHaveBeenCalled();
+});
+test('R4 empty URL resolves on inspection, reloads on retry and marks available only on image load', async () => {
+  const h = harness(); Object.assign(h.item, certifiedR4PhotoFixture());
+  const before = JSON.stringify(h.item);
+  const request = jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ url: 'https://fixture.test/authorized', expiresAt: Date.now() + 100000 })));
+  try {
+    await h.elements(h.render(), 'button').find(button => button.props.children === 'Ver imagen').props.onClick();
+    expect(renderToStaticMarkup(h.render())).toContain('Cargando imagen');
+    const img = h.elements(h.render(), 'img')[0]; expect(img.props.src).toBe('https://fixture.test/authorized');
+    img.props.onLoad(); expect(renderToStaticMarkup(h.render())).toContain('DISPONIBLE');
+    request.mockResolvedValue(new Response('{}', { status: 403 }));
+    await h.elements(h.render(), 'button').find(button => button.props.children === 'Ver imagen').props.onClick();
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(renderToStaticMarkup(h.render())).toContain('NO_DISPONIBLE');
+    expect(h.elements(h.render(), 'img')).toHaveLength(0);
+    expect(JSON.stringify(h.item)).toBe(before); expect(h.save).not.toHaveBeenCalled();
+  } finally { request.mockRestore(); }
 });
 test("actual card prevents concurrent decision, disables input, and shows only final server state", async () => {
   const h = harness(); let finish!: (value: any) => void;
@@ -71,8 +101,8 @@ test("server rejection remains unreviewed, shows alert and cannot report success
 test("image checks are opt-in and non-destructive with distinct available/broken states", () => {
   const h = harness(); expect(h.elements(h.render(), "img")).toHaveLength(0);
   h.elements(h.render(), "button").find(button => button.props.children === "Ver imagen").props.onClick();
-  h.elements(h.render(), "img")[0].props.onLoad(); expect(renderToStaticMarkup(h.render())).toContain("IMAGEN_DISPONIBLE");
-  h.elements(h.render(), "img")[0].props.onError(); expect(renderToStaticMarkup(h.render())).toContain("REFERENCIA_ROTA");
+  h.elements(h.render(), "img")[0].props.onLoad(); expect(renderToStaticMarkup(h.render())).toContain("DISPONIBLE");
+  h.elements(h.render(), "img")[0].props.onError(); expect(renderToStaticMarkup(h.render())).toContain("NO_DISPONIBLE");
   expect(h.save).not.toHaveBeenCalled();
 });
 test("read-only disables all decisions and guards programmatic clicks", async () => {

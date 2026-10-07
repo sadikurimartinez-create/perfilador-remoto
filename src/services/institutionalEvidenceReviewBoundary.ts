@@ -6,6 +6,7 @@ import { evidenceAliases, evidenceReviewLocatorId, institutionalReviewState, rev
 import { GeointEventOutboxService } from "./geoint/geointEventOutboxService";
 import { normalizeStreetViewFindingForPersistence, recoverHistoricalStreetViewFindingForApproval } from "./streetViewFindingService";
 import { makeFirestoreSafe } from "@/utils/firestoreSafe";
+import { isCertifiedR4FinalReview } from '@/utils/certifiedR4PhotoReview';
 
 // Invoked only after the existing institutional entity boundary authorizes WRITE.
 export async function commitInstitutionalEvidenceReview(db: Firestore, actor: any, input: EvidenceReviewRequest) {
@@ -23,6 +24,7 @@ export async function commitInstitutionalEvidenceReview(db: Firestore, actor: an
     if (input.source === "TACTICAL_STREET_VIEW" && matches.length !== 1) throw new Error("EVIDENCE_REVIEW_TARGET_AMBIGUOUS_OR_MISSING");
     const prior = input.source === "TACTICAL_STREET_VIEW" ? matches[0] : child?.data() || root?.data();
     if (!prior || prior.deleted) throw new Error("EVIDENCE_REVIEW_NOT_FOUND");
+    if (isCertifiedR4FinalReview(prior)) throw new Error('CERTIFIED_R4_REVIEW_FINAL');
     for (const record of [prior, root?.data()].filter(Boolean)) {
       if (record.expedienteId && record.expedienteId !== input.projectId || record.projectId && record.projectId !== input.projectId) throw new Error("EVIDENCE_REVIEW_CROSS_PROJECT");
     }
