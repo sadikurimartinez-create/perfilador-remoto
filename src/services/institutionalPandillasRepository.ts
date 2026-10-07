@@ -43,10 +43,9 @@ export class InstitutionalPandillasRepository {
    * The existing boundary verifies identity binding, review, hashes and fresh READ grants. */
   async resolveMasterMemberEvidence(gangId: string, memberIdentityId: string) {
     if (!memberIdentityId || typeof memberIdentityId !== 'string') throw new Error('PANDILLAS_MEMBER_ID_REQUIRED');
-    const custody = await this.resolveCustodyScope(gangId);
-    if (!custody) return null;
-    const result = await resolveGangPrimaryPhotoUrls(cookies().get('ceipol_session')?.value,
-      { projectId: custody.custodyProjectId, gangId: custody.masterGangId });
+    const resolved = await this.resolveMasterGangEvidence(gangId);
+    if (!resolved) return null;
+    const { custody, result } = resolved;
     if (result.projectId !== custody.custodyProjectId || result.gangId !== custody.masterGangId) {
       throw new Error('PANDILLAS_EVIDENCE_SCOPE_MISMATCH');
     }
@@ -60,5 +59,16 @@ export class InstitutionalPandillasRepository {
     const result = await this.resolveMasterMemberEvidence(gangId, memberIdentityId);
     return result ? { scope: result.scope, custody: result.custody, expiresAt: result.expiresAt,
       primaryPhoto: result.evidence.primaryPhoto } : null;
+  }
+  /** One authorized batch for UI cards; preserves existing R4 integrity and refresh policy. */
+  async resolveMasterGangEvidence(gangId: string) {
+    const custody = await this.resolveCustodyScope(gangId);
+    if (!custody) return null;
+    const result = await resolveGangPrimaryPhotoUrls(cookies().get('ceipol_session')?.value,
+      { projectId: custody.custodyProjectId, gangId: custody.masterGangId });
+    if (result.projectId !== custody.custodyProjectId || result.gangId !== custody.masterGangId) {
+      throw new Error('PANDILLAS_EVIDENCE_SCOPE_MISMATCH');
+    }
+    return { custody, result };
   }
 }

@@ -14,7 +14,10 @@ import {
   calculateSimilarity
 } from "./pandillas.mapper";
 import { PandillasService } from "./pandillas.service";
-import { DossierPrimaryPhoto, useDossierPhotos } from './components/DossierPrimaryPhoto';
+import { DossierPrimaryPhoto } from './components/DossierPrimaryPhoto';
+import { useMasterDossierPhotos } from './components/useMasterDossierPhotos';
+import { readInstitutionalMasterMember } from '@/lib/institutionalPandillasReadActions';
+import { resolvePandillasUiScope, canEditPandillasLegacy, selectPandillasMasterGang, PANDILLAS_LEGACY_EDIT_MESSAGE, PANDILLAS_CASE_MESSAGE } from './pandillasUiScope';
 import { legacyMemberFingerprint } from './photo-evidence/identity';
 import { MemberDossierPanel } from './components/MemberDossierConsultation';
 import { buildMemberDossierView, initialDossierConsultation, dossierConsultationTransition, isDossierExportCurrent, resolveDossierWordTarget, prepareAuthorizedDossierWordView, logDossierWordStage, DossierWordError, type DossierConsultationState } from './memberDossierView';
@@ -217,7 +220,11 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
     registerSweep
   } = useProject();
 
+  const [caseRequested, setCaseRequested] = useState(!!projectId);
+  const uiScope = resolvePandillasUiScope(caseRequested, projectId || activeProject?.id);
+  const caseEnabled = uiScope.caseEnabled;
   const canonicalProjectCenter = useMemo(() => {
+    if (!caseEnabled) return null;
     const geography = activeProject?.canonicalGeography;
     if (!geography || geography.validationStatus !== "VALID") {
       return null;
@@ -236,7 +243,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
       lat: centroid.lat,
       lng: centroid.lng,
     };
-  }, [activeProject?.canonicalGeography]);
+  }, [activeProject?.canonicalGeography, caseEnabled]);
   const username = typeof user?.username === "string" ? user.username.trim() : "";
 
   // --- REGISTRY LIST STATES ---
@@ -264,10 +271,12 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
   const dossierTarget = useMemo(() => {
     const selected = storedGangs.filter(gang => gang.id === selectedGangId);
     const selectedProjectId = projectId || activeProject?.id;
-    if (!user || !selectedGangId || selectedGangId.startsWith('static-gang-') || !selectedProjectId
+    if (!caseEnabled || !user || !selectedGangId || selectedGangId.startsWith('static-gang-') || !selectedProjectId
       || selected.length !== 1 || selected[0].projectId !== selectedProjectId) return null;
     return selected[0];
-  }, [storedGangs, selectedGangId, projectId, activeProject?.id, user]);
+  }, [storedGangs, selectedGangId, projectId, activeProject?.id, user, caseEnabled]);
+  const selectedMasterGang = selectPandillasMasterGang(storedGangs, selectedGangId);
+  const legacyWriteEnabled = canEditPandillasLegacy(uiScope, !!user, selectedMasterGang);
   const dossierCanApply = !!dossierTarget && (r3Payload
     ? !!r3Review?.preview.summary.UPDATE_FIELDS && canApplyR3Update(dossierTarget, r3Payload, r3Review)
     : !!dossierPayload && canApplyDossierImport(dossierTarget, dossierPayload, dossierReview));
@@ -396,8 +405,8 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
   const [activeTab, setActiveTab] = useState<"dashboard" | "registro" | "integrantes" | "relaciones" | "geointeligencia" | "barridos" | "gip">("dashboard");
   // READ scope belongs to the consulted gang, independently of the write/import target.
   const consultationTarget = useMemo(() => resolveDossierWordTarget(storedGangs, selectedGangId), [storedGangs, selectedGangId]);
-  const consultationScope = `${selectedGangId}\u0000${consultationTarget?.projectId || ''}\u0000${username}`;
-  const dossierPhotos = useDossierPhotos(consultationTarget?.projectId, selectedGangId, integrantes,
+  const consultationScope = `${selectedGangId}\u0000${username}`;
+  const dossierPhotos = useMasterDossierPhotos(selectedGangId, integrantes,
     activeTab === 'integrantes' && !!consultationTarget && !!user, username);
 
   // --- NEW GOVERNANCE GIP STATES ---
@@ -464,6 +473,18 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
   consultationGuard.current = { scope: consultationScope, selected: consultation.selected, members: integrantes, enabled: activeTab === 'integrantes' };
   const changeConsultation = (action: Parameters<typeof dossierConsultationTransition>[1]) =>
     setConsultationState({ ...dossierConsultationTransition(consultation, action), scope: consultationScope });
+  const memberReadSequence = useRef(0);
+  const consultMasterMember = async (member: GangMember) => {
+    const sequence = ++memberReadSequence.current;
+    const scope = consultationScope;
+    try {
+      const fresh = await readInstitutionalMasterMember(selectedGangId, member.nombre);
+      if (!fresh || await legacyMemberFingerprint(fresh) !== await legacyMemberFingerprint(member)) {
+        throw new Error('PANDILLAS_MEMBER_CHANGED');
+      }
+      if (sequence === memberReadSequence.current && consultationGuard.current.scope === scope) changeConsultation(member);
+    } catch { if (sequence === memberReadSequence.current) alert('No fue posible consultar la ficha vigente. Actualice el catálogo.'); }
+  };
   const consultedIndex = consultation.selected ? integrantes.indexOf(consultation.selected) : -1;
   const consultedView = consultedIndex >= 0 ? buildMemberDossierView(integrantes[consultedIndex], consultationTarget?.nombre || nombre, dossierPhotos[consultedIndex]) : null;
   const exportConsultedMember = async () => {
@@ -568,7 +589,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
 
   // Load project photos
   useEffect(() => {
-    if (projectId) {
+    if (caseEnabled && projectId) {
       const fetchProjectPhotos = async () => {
         try {
           const firestore = getDb();
@@ -583,8 +604,8 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
         }
       };
       void fetchProjectPhotos();
-    }
-  }, [projectId]);
+    } else setProjectPhotos([]);
+  }, [projectId, caseEnabled]);
 
   // Synchronize albumGangId with active selectedGangId or default to first gang
   useEffect(() => {
@@ -821,10 +842,10 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
   // Load registered gangs on mount
   useEffect(() => {
     void loadSavedGangs();
-    if (projectId) {
+    if (caseEnabled && projectId) {
       void loadGangForProject();
     }
-  }, [projectId]);
+  }, [projectId, caseEnabled]);
 
   const loadSavedGangs = async () => {
     try {
@@ -874,6 +895,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
       }
       
       setStoredGangs(processedList);
+      if (!caseEnabled) return;
       
       // Si hay pandillas y el proyecto ya tiene un reporte, lo cargará loadGangForProject.
       // De lo contrario, si hay pandillas y la más cercana está a <= 1 km, autoseleccionamos.
@@ -909,7 +931,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
   };
 
   const loadGangForProject = async () => {
-    if (!projectId) return;
+    if (!caseEnabled || !projectId) return;
     try {
       const existing = await PandillasService.getGangByProjectId(projectId);
       if (existing) {
@@ -1060,6 +1082,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
 
   // --- SAVE TO FIRESTORE ---
   const handleSaveGangToCloud = async () => {
+    if (!legacyWriteEnabled) { alert(PANDILLAS_LEGACY_EDIT_MESSAGE); return; }
     if (selectedGangId.startsWith("static-gang-")) {
       alert("No se permite promover un registro estático al catálogo productivo de pandillas.");
       return;
@@ -1318,6 +1341,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
   };
 
   const handleAddMember = () => {
+    if (!legacyWriteEnabled) { alert(PANDILLAS_LEGACY_EDIT_MESSAGE); return; }
     if (!tempMember.nombre && !tempMember.alias) {
       alert("⚠️ El integrante requiere por lo menos un nombre o alias identificatorio.");
       return;
@@ -1428,6 +1452,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
   };
 
   const handleEditMember = (index: number) => {
+    if (!legacyWriteEnabled) { alert(PANDILLAS_LEGACY_EDIT_MESSAGE); return; }
     const member = integrantes[index];
 
     setEditingMemberIndex(index);
@@ -1454,6 +1479,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
 
   // --- RELATIONSHIPS METHODS ---
   const handleAddRelationship = () => {
+    if (!legacyWriteEnabled) { alert(PANDILLAS_LEGACY_EDIT_MESSAGE); return; }
     if (!tempRel.pandillaNombre) {
       alert("⚠️ Seleccione o escriba el nombre de la pandilla vinculada.");
       return;
@@ -1477,6 +1503,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
 
   // --- TIMELINE EVENTS METHODS ---
   const handleAddTimelineEvent = () => {
+    if (!legacyWriteEnabled) { alert(PANDILLAS_LEGACY_EDIT_MESSAGE); return; }
     if (!tempEvent.titulo || !tempEvent.descripcion) {
       alert("⚠️ Ingrese un título y descripción del evento táctico.");
       return;
@@ -1497,6 +1524,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
   };
 
   const handleGisAnalysis = async () => {
+    if (!caseEnabled) { alert(PANDILLAS_CASE_MESSAGE); return; }
     if (selectedGangsForGis.length === 0) {
       alert("⚠️ Seleccione al menos una pandilla para realizar el análisis.");
       return;
@@ -1555,6 +1583,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
 
   // --- GRANULAR GEOSPATIAL SWEEPS ---
   const handleExecuteTargetedSweep = async () => {
+    if (!caseEnabled) { alert(PANDILLAS_CASE_MESSAGE); return; }
     if (!nombre) {
       alert("⚠️ Complete los datos generales de la pandilla antes de lanzar el barrido de geointeligencia.");
       return;
@@ -1698,6 +1727,13 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
 
   return (
     <div className="w-full space-y-6">
+      <div className="text-xs text-slate-300 flex flex-wrap items-center gap-3">
+        <span>{caseEnabled ? 'Contexto de expediente' : 'Consulta institucional de Pandillas'}</span>
+        {(projectId || activeProject?.id) && <label><input type="checkbox" checked={caseEnabled}
+          onChange={event => setCaseRequested(event.target.checked)} /> Contextualizar con expediente activo</label>}
+        {!legacyWriteEnabled && <span>{PANDILLAS_LEGACY_EDIT_MESSAGE}</span>}
+        {!caseEnabled && <span>{PANDILLAS_CASE_MESSAGE}</span>}
+      </div>
       {/* GLOWING HEADER BAR */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-slate-800 p-6 md:p-8 shadow-2xl">
         <div className="absolute right-0 top-0 h-40 w-40 rounded-full bg-sky-500/10 blur-3xl pointer-events-none" />
@@ -1725,6 +1761,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
               🔄 Reiniciar
             </button>
             <button
+              disabled={!legacyWriteEnabled} title={!legacyWriteEnabled ? PANDILLAS_LEGACY_EDIT_MESSAGE : undefined}
               onClick={handleSaveGangToCloud}
               className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-black text-slate-950 transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-500/10 uppercase"
             >
@@ -1911,7 +1948,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
                     className="w-full bg-slate-900 border border-slate-800 rounded p-2 text-xs text-slate-200 focus:outline-none"
                   />
                   <button
-                    onClick={handleAddTimelineEvent}
+                    disabled={!legacyWriteEnabled} onClick={handleAddTimelineEvent}
                     className="w-full py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-xs font-bold text-slate-950 uppercase"
                   >
                     ➕ Registrar Incidente
@@ -1945,7 +1982,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
             {/* SELECTION MATRIX (LOAD SYSTEM RECORDS) */}
             <div className="bg-slate-900/30 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-4">
               <h3 className="text-sm font-black text-slate-200 uppercase tracking-wide border-b border-slate-800 pb-2">
-                📂 Expedientes de Geointeligencia en Base de Datos
+                📂 Catálogo institucional de Pandillas
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {storedGangs.map(g => (
@@ -1960,8 +1997,10 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
                   >
                     <button
                       type="button"
+                      disabled={!canEditPandillasLegacy(uiScope, !!user, g)}
                       onClick={async (e) => {
                         e.stopPropagation();
+                        if (!canEditPandillasLegacy(uiScope, !!user, g)) return;
                         if (confirm(`🚨 ¿Confirma la eliminación permanente de la pandilla "${g.nombre}" de la base de datos?`)) {
                           await PandillasService.deleteGang(g.id!);
                           await loadSavedGangs();
@@ -1975,7 +2014,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
                       🗑️
                     </button>
                     <div>
-                      <span className="text-[9px] font-black text-sky-400 uppercase tracking-wider">EXPEDIENTE CEIPOL</span>
+                      <span className="text-[9px] font-black text-sky-400 uppercase tracking-wider">PANDILLA INSTITUCIONAL</span>
                       <h4 className="text-xs font-extrabold text-slate-200 truncate uppercase mt-0.5">{g.nombre}</h4>
                       <p className="text-[10px] text-slate-400 mt-1">Zona: <strong className="text-slate-300">{g.zonaInfluencia || "Sin delimitar"}</strong></p>
                     </div>
@@ -2031,6 +2070,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
 
         {/* TAB 2: PANDILLA REGISTRY FORM */}
         {activeTab === "registro" && (
+          <fieldset disabled={!legacyWriteEnabled} className="contents">
           <div className="bg-slate-900/30 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
             <div className="border-b border-slate-800 pb-3">
               <h2 className="text-lg font-bold text-slate-200 flex items-center gap-2">
@@ -2267,7 +2307,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
                           </span>
                           <button
                             type="button"
-                            onClick={() => setImagenesGrafiti(imagenesGrafiti.filter(x => x.id !== img.id))}
+                            disabled={!legacyWriteEnabled} onClick={() => legacyWriteEnabled && setImagenesGrafiti(imagenesGrafiti.filter(x => x.id !== img.id))}
                             className="absolute top-1 right-1 bg-red-950/90 hover:bg-red-900/90 border border-red-950 text-[8px] font-black text-red-400 px-1.5 py-0.5 rounded transition-colors"
                           >
                             Eliminar
@@ -2291,7 +2331,8 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
 
                 <button
                   type="button"
-                  onClick={handleSaveGangToCloud}
+                  disabled={!legacyWriteEnabled} title={!legacyWriteEnabled ? PANDILLAS_LEGACY_EDIT_MESSAGE : undefined}
+              onClick={handleSaveGangToCloud}
                   className="w-full py-3 rounded-xl bg-gradient-to-r from-sky-400 to-indigo-500 hover:from-sky-300 hover:to-indigo-400 text-slate-950 font-black text-xs uppercase tracking-wider transition-all shadow-lg"
                 >
                   💾 Confirmar & Guardar Ficha General
@@ -2299,6 +2340,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
               </div>
             </div>
           </div>
+          </fieldset>
         )}
 
         {/* TAB 3: MEMBER DOSSIER */}
@@ -2307,7 +2349,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
             <details className="lg:col-span-12 bg-slate-900/30 border border-slate-800 rounded-2xl p-4 space-y-2">
               <summary className="text-sm font-bold text-slate-200 cursor-pointer">IMPORTAR DOSSIER INSTITUCIONAL</summary>
               <label className="block text-sm text-slate-300">Seleccionar archivo JSON (máximo 900 KB)
-                <input ref={dossierFileInput} type="file" accept=".json,application/json" disabled={dossierBusy}
+                <input ref={dossierFileInput} type="file" accept=".json,application/json" disabled={!legacyWriteEnabled || dossierBusy}
                   onChange={event => { void selectDossierFile(event.target.files?.[0]); }} className="block mt-2" />
               </label>
               {dossierFile && <p className="text-xs text-slate-300">{dossierFile.name} · {dossierFile.size} bytes</p>}
@@ -2320,7 +2362,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
               <button type="button" disabled={!dossierCanApply || dossierBusy}
                 onClick={() => { void (r3Payload ? applyInstitutionalR3() : applyInstitutionalDossier()); }}
                 className="ml-2 px-4 py-2 rounded-lg bg-indigo-800 text-white disabled:opacity-40">CONFIRMAR E IMPORTAR</button>
-              <p className="text-xs text-slate-400">Seleccione una pandilla existente de este expediente. Solo importación textual; fotografías deshabilitadas.</p>
+              <p className="text-xs text-slate-400">{legacyWriteEnabled ? 'Seleccione una pandilla existente de este expediente. Solo importación textual; fotografías deshabilitadas.' : PANDILLAS_LEGACY_EDIT_MESSAGE}</p>
               <p role="status" className="text-sm text-slate-200">{dossierBusy ? 'IMPORTACIÓN EN CURSO' : dossierStatus}</p>
               {dossierError && <p role="alert" className="text-sm text-red-300">{dossierError}</p>}
               {r3Payload && <p className="text-xs text-slate-300">R3 UPDATE_ONLY · Pandilla: {r3Payload.targetGangName} · Registros: {r3Payload.membersUpdate.length}</p>}
@@ -2354,8 +2396,8 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
             </details>
             {/* Consultation and existing form opened on demand. */}
             <div className="lg:col-span-6 bg-slate-900/30 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-              <MemberDossierPanel formOpen={consultation.formOpen} view={consultedView} onWord={exportConsultedMember} onClear={() => changeConsultation('CLEAR')}
-                onRegister={() => { setEditingMemberIndex(null); setTempMember({}); setTempGeoLat(''); setTempGeoLng(''); changeConsultation('REGISTER'); }}>
+              <MemberDossierPanel formOpen={consultation.formOpen && legacyWriteEnabled} registerDisabled={!legacyWriteEnabled} view={consultedView} onWord={exportConsultedMember} onClear={() => changeConsultation('CLEAR')}
+                onRegister={() => { if (!legacyWriteEnabled) return; setEditingMemberIndex(null); setTempMember({}); setTempGeoLat(''); setTempGeoLng(''); changeConsultation('REGISTER'); }}>
               <div className="border-b border-slate-800 pb-2">
                 <h3 className="text-sm font-black text-slate-200 uppercase tracking-wide">
                   {editingMemberIndex !== null ? "✏️ Editar Integrante del Dossier" : "➕ Registrar Nuevo Integrante en Dossier"}
@@ -2642,7 +2684,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
                       Cancelar
                     </button>
                   <button
-                    onClick={handleAddMember}
+                    disabled={!legacyWriteEnabled} onClick={handleAddMember}
                     className="flex-2 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-xs uppercase flex-1 shadow"
                   >
                     💾 Guardar Integrante en Ficha
@@ -2707,9 +2749,9 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
                       </div>
 
                       <div className="flex flex-col gap-1.5 justify-center pl-2">
-                        <button onClick={() => changeConsultation(m)} className="px-2 py-1.5 rounded text-sky-300 text-xs font-bold" aria-pressed={consultation.selected === m}>CONSULTAR</button>
+                        <button onClick={() => { void consultMasterMember(m); }} className="px-2 py-1.5 rounded text-sky-300 text-xs font-bold" aria-pressed={consultation.selected === m}>CONSULTAR</button>
                         <button
-                          onClick={() => handleEditMember(idx)}
+                          disabled={!legacyWriteEnabled} onClick={() => handleEditMember(idx)}
                           className="p-1.5 hover:bg-slate-900 rounded text-slate-400 hover:text-sky-400 text-xs transition-colors"
                           title="Editar Ficha"
                         >
@@ -2717,12 +2759,12 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
                         </button>
                         <button
                           onClick={() => {
-                            if (confirm(`🚨 ¿Remover a "${m.alias || m.nombre}" del dossier?`)) {
+                            if (legacyWriteEnabled && confirm(`🚨 ¿Remover a "${m.alias || m.nombre}" del dossier?`)) {
                               setIntegrantes(integrantes.filter((_, i) => i !== idx));
                             }
                           }}
                           className="p-1.5 hover:bg-slate-900 rounded text-slate-400 hover:text-red-400 text-xs transition-colors"
-                          title="Eliminar"
+                          disabled={!legacyWriteEnabled} title="Eliminar"
                         >
                           🗑️
                         </button>
@@ -2815,7 +2857,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
                 </div>
 
                 <button
-                  onClick={handleAddRelationship}
+                  disabled={!legacyWriteEnabled} onClick={handleAddRelationship}
                   className="w-full py-2 bg-sky-600 hover:bg-sky-500 text-xs font-bold text-slate-950 uppercase rounded shadow"
                 >
                   ➕ Enlazar Pandillas
@@ -2841,7 +2883,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
                           <p className="text-[10px] text-slate-500 mt-0.5">Motivo: {rel.tipoVinculo} (Severidad: {rel.nivelSeveridad})</p>
                         </div>
                         <button
-                          onClick={() => setRelaciones(relaciones.filter((_, i) => i !== idx))}
+                          disabled={!legacyWriteEnabled} onClick={() => legacyWriteEnabled && setRelaciones(relaciones.filter((_, i) => i !== idx))}
                           className="text-slate-500 hover:text-red-400 text-xs"
                         >
                           ✕
@@ -3424,7 +3466,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
                     <button
                       type="button"
                       onClick={handleGisAnalysis}
-                      disabled={isGisAnalyzing || selectedGangsForGis.length === 0}
+                      disabled={!caseEnabled || isGisAnalyzing || selectedGangsForGis.length === 0}
                       className="w-full py-3 bg-gradient-to-r from-sky-400 to-indigo-600 hover:opacity-90 disabled:opacity-40 text-slate-950 text-xs font-black uppercase rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-[0.98]"
                     >
                       {isGisAnalyzing ? (
@@ -3626,7 +3668,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
                     if (!activeAlbumGang) {
                       return (
                         <div className="p-8 text-center text-xs text-slate-500 italic">
-                          No hay expedientes de pandillas cargados en el sistema. Vaya al Panel de Registro para crear uno.
+                          No hay pandillas disponibles para esta sesión institucional.
                         </div>
                       );
                     }
@@ -4296,7 +4338,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
 
                   <button
                     onClick={handleExecuteTargetedSweep}
-                    disabled={isAnalyzing}
+                    disabled={!caseEnabled || isAnalyzing}
                     className="px-5 py-2 rounded-lg bg-gradient-to-r from-sky-400 to-indigo-600 hover:from-sky-300 hover:to-indigo-500 text-slate-950 text-xs font-black uppercase shadow-lg"
                   >
                     📡 Lanzar Barrido
@@ -4425,7 +4467,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
                       <button
-                        onClick={handleAttachReportToWorkspace}
+                        disabled={!caseEnabled} onClick={handleAttachReportToWorkspace}
                         className="px-4 py-2 rounded-lg border border-sky-500/40 bg-sky-950/30 hover:bg-sky-900/40 text-xs font-bold text-sky-400 uppercase"
                       >
                         📄 Anexar Reporte al Expediente
@@ -4519,7 +4561,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
                       <button
-                        onClick={handleAttachReportToWorkspace}
+                        disabled={!caseEnabled} onClick={handleAttachReportToWorkspace}
                         className="px-4 py-2 rounded-lg border border-sky-500/40 bg-sky-950/30 hover:bg-sky-900/40 text-xs font-bold text-sky-400 uppercase"
                       >
                         📄 Anexar Reporte al Expediente
@@ -4924,7 +4966,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
                     {/* Report action buttons */}
                     <div className="flex justify-end gap-3 pt-6 border-t border-slate-800 no-print">
                       <button
-                        onClick={handleAttachReportToWorkspace}
+                        disabled={!caseEnabled} onClick={handleAttachReportToWorkspace}
                         className="px-5 py-2.5 rounded-xl border border-sky-500/40 bg-sky-950/30 hover:bg-sky-900/40 text-xs font-black text-sky-400 uppercase tracking-wider shadow-lg transition-colors"
                       >
                         📄 Anexar Reporte Integral al Expediente

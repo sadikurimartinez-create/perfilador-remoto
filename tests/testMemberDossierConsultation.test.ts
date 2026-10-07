@@ -38,8 +38,8 @@ test('A/B/C: default consultation, explicit registration and cancel preserve sel
   expect(dossierConsultationTransition(open, 'CLOSE')).toEqual(selected);
   expect(dossierConsultationTransition(open, 'RESET')).toEqual(initialDossierConsultation);
   const ui = readFileSync('src/modules/pandillas/pandillas.ui.tsx', 'utf8');
-  expect(source).toContain('+ REGISTRAR NUEVO INTEGRANTE'); expect(ui).toContain('<MemberDossierPanel formOpen={consultation.formOpen}');
-  expect(ui).toContain('changeConsultation("CLOSE")'); expect(ui).toContain('changeConsultation(m)');
+  expect(source).toContain('+ REGISTRAR NUEVO INTEGRANTE'); expect(ui).toContain('<MemberDossierPanel formOpen={consultation.formOpen && legacyWriteEnabled} registerDisabled={!legacyWriteEnabled}');
+  expect(ui).toContain('changeConsultation("CLOSE")'); expect(ui).toContain('void consultMasterMember(m)');
 });
 test('D/E/L/M: explicit selection renders read-only fields and Word, with no capture, edit or PDF action', () => {
   expect(markup(null)).toContain('Seleccione un integrante');

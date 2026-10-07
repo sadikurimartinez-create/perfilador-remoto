@@ -24,3 +24,6 @@ export async function readInstitutionalMasterMemberPrimaryPhoto(gangId: string, 
 export async function readInstitutionalMasterMemberEvidence(gangId: string, memberIdentityId: string) {
   return new InstitutionalPandillasRepository().resolveMasterMemberEvidence(gangId, memberIdentityId);
 }
+export async function readInstitutionalMasterGangPhotos(gangId: string) {
+  return (await new InstitutionalPandillasRepository().resolveMasterGangEvidence(gangId))?.result ?? null;
+}

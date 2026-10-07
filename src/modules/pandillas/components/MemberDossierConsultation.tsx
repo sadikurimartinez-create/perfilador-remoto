@@ -2,12 +2,12 @@
 import React, { useState } from 'react';
 import { dossierWordErrorMessage, type MemberDossierView } from '../memberDossierView';
 
-export function MemberDossierPanel({ formOpen, onRegister, view, onWord, onClear, children }: {
+export function MemberDossierPanel({ formOpen, onRegister, view, onWord, onClear, children, registerDisabled = false }: {
   formOpen: boolean; onRegister: () => void; view: MemberDossierView | null;
-  onWord: () => Promise<void>; onClear: () => void; children: React.ReactNode;
+  onWord: () => Promise<void>; onClear: () => void; children: React.ReactNode; registerDisabled?: boolean;
 }) {
   return formOpen ? <>{children}</> : <>
-    <button onClick={onRegister} className="px-4 py-2 rounded-lg border border-sky-700 text-sky-300 text-xs font-bold">+ REGISTRAR NUEVO INTEGRANTE</button>
+    <button disabled={registerDisabled} onClick={onRegister} className="px-4 py-2 rounded-lg border border-sky-700 text-sky-300 text-xs font-bold">+ REGISTRAR NUEVO INTEGRANTE</button>
     <MemberDossierConsultation view={view} onWord={onWord} onClear={onClear} />
   </>;
 }
