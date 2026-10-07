@@ -1,5 +1,5 @@
 import { saveInstitutionalGang, deleteInstitutionalGang } from "@/lib/institutionalGangActions";
-import { readInstitutionalCollection } from "@/lib/institutionalCollectionActions";
+import { listInstitutionalPandillasLegacyView } from "@/lib/institutionalPandillasReadActions";
 import { GangEntity, FusionResult } from "./pandillas.mapper";
 import {
   PANDILLAS_SWEEP_CLIENT_TIMEOUT_MS,
@@ -83,7 +83,7 @@ export class PandillasService {
     }
     return saveInstitutionalGang(gang, { requireExisting: true, checkVersion: true, expectedUpdatedAt });
   }
-  static async getAllGangs(): Promise<GangEntity[]> { return await readInstitutionalCollection('pandillas') as GangEntity[]; }
+  static async getAllGangs(): Promise<GangEntity[]> { return listInstitutionalPandillasLegacyView(); }
   static async getGangByProjectId(projectId:string):Promise<GangEntity|null> { return (await this.getAllGangs()).find(gang=>gang.projectId===projectId)||null; }
   static async getGangByGeoReportId(geoReportId:string):Promise<GangEntity|null> { return (await this.getAllGangs()).find(gang=>gang.geoReportId===geoReportId)||null; }
   static async deleteGang(id:string):Promise<void> { await deleteInstitutionalGang(id); }
