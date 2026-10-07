@@ -75,6 +75,18 @@ export async function waitForPrintableImages(root: HTMLElement) {
     if (img.complete) done();
   })));
 }
+export function printGangOrganization(body: HTMLElement, printer: Pick<Window, 'print' | 'addEventListener' | 'removeEventListener'>) {
+  const cleanup = () => body.classList.remove(styles.printMode);
+  printer.addEventListener('afterprint', cleanup);
+  body.classList.add(styles.printMode);
+  try {
+    printer.print();
+  } finally {
+    cleanup();
+    printer.removeEventListener('afterprint', cleanup);
+  }
+}
+
 export function GangOrganizationPrintView({ snapshot, onClose }: { snapshot: GangOrganizationSnapshot; onClose: () => void }) {
   const root = useRef<HTMLDivElement>(null);
   const alive = useRef(true);
@@ -90,7 +102,7 @@ export function GangOrganizationPrintView({ snapshot, onClose }: { snapshot: Gan
         if (root.current) await waitForPrintableImages(root.current);
         await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
       }
-      if (alive.current && root.current) window.print();
+      if (alive.current && root.current) printGangOrganization(document.body, window);
     } catch { if (alive.current) setError('No se pudo preparar la impresión. Intente nuevamente.'); }
     finally { if (alive.current) setBusy(false); }
   };

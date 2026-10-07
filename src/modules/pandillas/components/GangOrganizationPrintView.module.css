@@ -22,8 +22,8 @@
 .neutral { --role-color: #334155; }
 @media (max-width: 1000px) { .page { width: 96%; } .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media print {
-  :global(body:has(> [data-gang-print-root]) > :not([data-gang-print-root])) { display: none !important; }
-  :global(body:has(> [data-gang-print-root])) { margin: 0 !important; background: white !important; }
+  :global(body).printMode > :not([data-gang-print-root]) { display: none !important; }
+  :global(body).printMode { margin: 0 !important; background: white !important; }
   .overlay { position: static; overflow: visible; background: white; }
   .toolbar { display: none !important; }
   .page { width: 100%; min-height: 0; margin: 0; padding: 0; break-after: page; page-break-after: always; }

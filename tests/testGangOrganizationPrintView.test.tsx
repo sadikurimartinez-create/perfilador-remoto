@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 jest.mock('../src/modules/pandillas/components/GangOrganizationPrintView.module.css', () => ({ __esModule: true, default: new Proxy({}, { get: (_, key) => String(key) }) }));
-import { GangOrganizationPages, createGangOrganizationSnapshot, organizationPages, getGangRoleVisualStyle, GANG_ROLE_OPTIONS, waitForPrintableImages } from '../src/modules/pandillas/components/GangOrganizationPrintView';
+import { GangOrganizationPages, createGangOrganizationSnapshot, organizationPages, getGangRoleVisualStyle, GANG_ROLE_OPTIONS, waitForPrintableImages, printGangOrganization } from '../src/modules/pandillas/components/GangOrganizationPrintView';
 import type { GangMember } from '../src/modules/pandillas/pandillas.mapper';
 const member = (status?: GangMember['estatusPandilla']): GangMember => ({ nombre: 'Nombre documental', alias: 'Alias documental', rol: '', estatusPandilla: status });
 const snapshot = (members = [member()]) => createGangOrganizationSnapshot('Pandilla documental', members, ['https://example.test/primary.jpg'], '07/10/2026');
@@ -40,4 +40,26 @@ test('imagen bloqueada impide imprimir indefinidamente', async () => {
     const expectation = expect(waitForPrintableImages({ querySelectorAll: () => [img] } as unknown as HTMLElement)).rejects.toThrow('PRINT_IMAGE_TIMEOUT');
     jest.advanceTimersByTime(20000); await expectation;
   } finally { jest.useRealTimers(); }
+});
+
+test.each(['success', 'cancel', 'error'] as const)('print mode restores body after %s', outcome => {
+  const classes = new Set(['existing-class']);
+  const body = { classList: { add: (name: string) => classes.add(name), remove: (name: string) => classes.delete(name) } } as unknown as HTMLElement;
+  const events = new EventTarget();
+  const printer = Object.assign(events, { print: jest.fn(() => {
+    expect(classes.has('printMode')).toBe(true);
+    if (outcome === 'error') throw new Error('PRINT_FAILED');
+    events.dispatchEvent(new Event('afterprint'));
+    expect(classes.has('printMode')).toBe(false);
+  }) });
+  if (outcome === 'error') expect(() => printGangOrganization(body, printer)).toThrow('PRINT_FAILED');
+  else { printGangOrganization(body, printer); printGangOrganization(body, printer); expect(printer.print).toHaveBeenCalledTimes(2); }
+  expect([...classes]).toEqual(['existing-class']);
+});
+test('print mode restores body even without afterprint', () => {
+  const classes = new Set<string>();
+  const body = { classList: { add: (name: string) => classes.add(name), remove: (name: string) => classes.delete(name) } } as unknown as HTMLElement;
+  const printer = Object.assign(new EventTarget(), { print: () => expect(classes.has('printMode')).toBe(true) });
+  printGangOrganization(body, printer);
+  expect(classes.size).toBe(0);
 });
