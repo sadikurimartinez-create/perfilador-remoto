@@ -14,6 +14,8 @@ import {
   calculateSimilarity
 } from "./pandillas.mapper";
 import { PandillasService } from "./pandillas.service";
+import { CEIPOLButton } from "@/components/ui/CEIPOLButton";
+import { GangOrganizationPrintView, GANG_ROLE_OPTIONS, createGangOrganizationSnapshot, type GangOrganizationSnapshot } from "./components/GangOrganizationPrintView";
 import { DossierPrimaryPhoto } from './components/DossierPrimaryPhoto';
 import { useMasterDossierPhotos } from './components/useMasterDossierPhotos';
 import { readInstitutionalMasterMember } from '@/lib/institutionalPandillasReadActions';
@@ -409,6 +411,8 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
   const dossierPhotos = useMasterDossierPhotos(selectedGangId, integrantes,
     activeTab === 'integrantes' && !!consultationTarget && !!user, username);
 
+  const [organization, setOrganization] = useState<{ scope: string; snapshot: GangOrganizationSnapshot; source: GangMember[] } | null>(null);
+  useEffect(() => { setOrganization(null); }, [consultationScope, integrantes, activeTab]);
   // --- NEW GOVERNANCE GIP STATES ---
   const [candidates, setCandidates] = useState<GangMemberCandidate[]>([]);
   const [ileMemories, setIleMemories] = useState<ILEMemory[]>([]);
@@ -1401,7 +1405,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
     const newMember: GangMember = {
       nombre: tempMember.nombre || "",
       alias: tempMember.alias || "",
-      rol: tempMember.estatusPandilla || "",
+      rol: tempMember.estatusPandilla === "Otro" ? tempMember.rol || "" : tempMember.estatusPandilla || "",
       edad: tempMember.edad || "",
       ...(tempMember.sexo ? { sexo: tempMember.sexo } : {}),
       curp: tempMember.curp,
@@ -2486,16 +2490,10 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
                       className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200"
                     >
                       <option value="">No registrado</option>
-                      <option value="Líder">Líder</option>
-                      <option value="Segundo al mando">Segundo al mando</option>
-                      <option value="Reclutador">Reclutador</option>
-                      <option value="Distribuidor">Distribuidor</option>
-                      <option value="Vigilante">Vigilante</option>
-                      <option value="Operador">Operador</option>
-                      <option value="Integrante">Integrante</option>
-                      <option value="Exintegrante">Exintegrante</option>
-                      <option value="Colaborador externo">Colaborador externo</option>
+                      {tempMember.estatusPandilla && !GANG_ROLE_OPTIONS.includes(tempMember.estatusPandilla) && <option value={tempMember.estatusPandilla}>{tempMember.estatusPandilla}</option>}
+                      {GANG_ROLE_OPTIONS.map(status => <option key={status} value={status}>{status}</option>)}
                     </select>
+                    {tempMember.estatusPandilla === "Otro" && <label className="block text-xs text-slate-300">Función registrada<input value={tempMember.rol || ""} onChange={e => setTempMember({ ...tempMember, rol: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1.5" /></label>}
                   </div>
                 </div>
 
@@ -2694,8 +2692,10 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
               </MemberDossierPanel>
             </div>
 
+            {organization && organization.scope === consultationScope && organization.source === integrantes && user && activeTab === "integrantes" && <GangOrganizationPrintView snapshot={organization.snapshot} onClose={() => setOrganization(null)} />}
             {/* REGISTERED DOSSIER GRID (6 cols) */}
             <div className="lg:col-span-6 space-y-4 bg-slate-900/30 border border-slate-800 rounded-2xl p-6 shadow-xl">
+              <CEIPOLButton disabled={!user || !consultationTarget} onClick={() => setOrganization({ scope: consultationScope, source: integrantes, snapshot: createGangOrganizationSnapshot(consultationTarget?.nombre || nombre, integrantes, dossierPhotos.map(photo => photo.primary?.derivedUrl)) })}>GENERAR ORGANIGRAMA DE LA PANDILLA</CEIPOLButton>
               <h3 className="text-sm font-black text-slate-200 uppercase tracking-wide border-b border-slate-800 pb-2">
                 📋 Dossier Criminal de la Pandilla ({integrantes.length} integrantes)
               </h3>

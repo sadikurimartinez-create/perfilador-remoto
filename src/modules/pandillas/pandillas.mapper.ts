@@ -51,7 +51,9 @@ export interface GangMember {
     | "Operador"
     | "Integrante"
     | "Exintegrante"
-    | "Colaborador externo";
+    | "Colaborador externo"
+    | "Sicario" | "Narcomenudista" | "Halcón" | "Chofer"
+    | "Encargado de punto" | "Enlace" | "Logística" | "No determinado" | "Otro";
   georreferencia?: {
     lat: number;
     lng: number;

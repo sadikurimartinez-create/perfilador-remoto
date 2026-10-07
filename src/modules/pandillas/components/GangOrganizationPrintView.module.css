@@ -1,0 +1,33 @@
+.overlay { position: fixed; inset: 0; z-index: 10000; overflow: auto; background: #e2e8f0; color: #0f172a; }
+.toolbar { display: flex; gap: 12px; padding: 16px; justify-content: center; }
+.page { box-sizing: border-box; width: 10in; min-height: 7.2in; margin: 16px auto; padding: .25in; background: white; font: 12px Arial, sans-serif; }
+.page header { text-align: center; line-height: 1.5; }
+.page h2 { text-align: center; font-size: 15px; margin: 8px; }
+.root { border: 2px solid #334155; padding: 8px; text-align: center; font-size: 20px; overflow-wrap: anywhere; margin: 12px auto; }
+.legend { text-align: center; font-size: 10px; }
+.grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; border-top: 2px solid #334155; padding-top: 16px; }
+.card { position: relative; border: 2px solid var(--role-color, #475569); border-radius: 4px; padding: 8px; display: flex; flex-direction: column; gap: 5px; align-items: center; text-align: center; overflow-wrap: anywhere; break-inside: avoid; page-break-inside: avoid; }
+.card::before { content: ''; position: absolute; height: 16px; top: -18px; left: 50%; border-left: 2px solid #334155; }
+.photo { height: 1.05in; width: 100%; display: flex; align-items: center; justify-content: center; }
+.photo img { width: 100%; height: 100%; object-fit: contain; }
+.placeholder { font-size: 11px; color: #475569; }
+.badge { padding: 4px 7px; border: 1px solid var(--role-color, #475569); color: var(--role-color, #475569); font-weight: bold; }
+.sicario { --role-color: #b91c1c; }
+.sicario .badge { background: #b91c1c; color: white; }
+.leader { --role-color: #92400e; }
+.deputy { --role-color: #c2410c; }
+.purple { --role-color: #6b21a8; }
+.cyan { --role-color: #155e75; }
+.slate { --role-color: #475569; }
+.neutral { --role-color: #334155; }
+@media (max-width: 1000px) { .page { width: 96%; } .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media print {
+  :global(body:has(> [data-gang-print-root]) > :not([data-gang-print-root])) { display: none !important; }
+  :global(body:has(> [data-gang-print-root])) { margin: 0 !important; background: white !important; }
+  .overlay { position: static; overflow: visible; background: white; }
+  .toolbar { display: none !important; }
+  .page { width: 100%; min-height: 0; margin: 0; padding: 0; break-after: page; page-break-after: always; }
+  .page:last-child { break-after: auto; page-break-after: auto; }
+  .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .page, .badge { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+}
