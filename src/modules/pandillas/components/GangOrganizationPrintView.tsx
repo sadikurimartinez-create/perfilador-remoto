@@ -27,15 +27,11 @@ export function createGangOrganizationSnapshot(gangName: string, members: readon
   }))) });
 }
 export function organizationPages(snapshot: GangOrganizationSnapshot) {
-  const groups = [
-    { label: 'Liderazgo', members: snapshot.members.filter(m => ['Líder', 'Segundo al mando'].includes(m.estatusPandilla || '')) },
-    { label: 'Integrantes y funciones', members: snapshot.members.filter(m => !['Líder', 'Segundo al mando'].includes(m.estatusPandilla || '')) },
-  ];
+  const size = snapshot.members.some(m => `${m.nombre}${m.alias}${m.rol}${m.estatusPandilla || ''}`.length > 160) ? 2 : 6;
   const pages: { label: string; members: readonly OrganizationMember[] }[] = [];
-  for (const group of groups) {
-    // Long labels receive more space; never truncate documentary names or aliases.
-    const size = group.members.some(m => `${m.nombre}${m.alias}${m.rol}${m.estatusPandilla || ''}`.length > 160) ? 1 : 4;
-    for (let i = 0; i < group.members.length; i += size) pages.push({ label: group.label, members: group.members.slice(i, i + size) });
+  for (let i = 0; i < snapshot.members.length; i += size) {
+    const members = snapshot.members.slice(i, i + size);
+    pages.push({ label: members.some(m => ['Líder', 'Segundo al mando'].includes(m.estatusPandilla || '')) ? 'Liderazgo documentado e integrantes' : 'Integrantes y funciones', members });
   }
   return pages.length ? pages : [{ label: 'Sin integrantes', members: [] }];
 }
@@ -49,19 +45,19 @@ export function GangOrganizationPages({ snapshot }: { snapshot: GangOrganization
   const pages = organizationPages(snapshot);
   return <>{pages.map((page, pageIndex) => <section className={styles.page} key={pageIndex}>
     <header><strong>SECRETARÍA DE SEGURIDAD PÚBLICA DEL ESTADO — CEIPOL</strong>
-      <div>Organigrama documental · {snapshot.members.length} integrantes · {snapshot.generatedAt}</div>
+      <div>Organigrama documental de pandilla · {snapshot.members.length} integrantes · {snapshot.generatedAt}</div>
       <div>Página {pageIndex + 1} de {pages.length}</div></header>
     <h1 className={styles.root}>{snapshot.gangName}</h1>
     <h2>{page.label}</h2>
     <p className={styles.legend}>Conectores de pertenencia a la pandilla. No representan relaciones de mando. El color identifica únicamente la categoría registrada.</p>
     {!page.members.length && <p>Sin integrantes registrados.</p>}
-    <div className={styles.grid} style={{ gridTemplateColumns: `repeat(${Math.max(1, Math.min(4, page.members.length))}, minmax(0, 1fr))` }}>{page.members.map((m, index) => <article key={index}
-      className={`${styles.card} ${styles[getGangRoleVisualStyle(m.estatusPandilla)]}`}>
+    <div className={styles.grid} style={{ gridTemplateColumns: `repeat(${Math.max(1, Math.min(3, page.members.length))}, minmax(0, 1fr))` }}>{page.members.map((m, index) => <article key={index}
+      className={`${styles.card} ${styles[getGangRoleVisualStyle(m.estatusPandilla || m.rol)]}`}>
       <div className={styles.photo}><OrganizationPhoto member={m} /></div>
-      <strong>{m.nombre || 'Nombre no registrado'}</strong>
-      {m.alias && <div>Alias: {m.alias}</div>}
+      <strong className={styles.memberName}>{m.nombre || 'Nombre no registrado'}</strong>
+      {m.alias && <div className={styles.alias}>Alias: {m.alias}</div>}
       {m.edad !== undefined && m.edad !== '' && <div>Edad: {m.edad}</div>}
-      <span className={styles.badge}>{m.estatusPandilla === 'Sicario' ? 'SICARIO' : m.estatusPandilla || m.rol || 'Función no registrada'}</span>
+      <span className={styles.badge}>{(m.estatusPandilla || m.rol) === 'Sicario' ? 'SICARIO' : m.estatusPandilla || m.rol || 'Función no registrada'}</span>
       {m.rol && m.rol !== m.estatusPandilla && <div>Rol registrado: {m.rol}</div>}
     </article>)}</div>
   </section>)}</>;

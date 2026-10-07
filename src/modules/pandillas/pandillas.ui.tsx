@@ -17,7 +17,7 @@ import { PandillasService } from "./pandillas.service";
 import { CEIPOLButton } from "@/components/ui/CEIPOLButton";
 import { GangOrganizationPrintView, GANG_ROLE_OPTIONS, createGangOrganizationSnapshot, type GangOrganizationSnapshot } from "./components/GangOrganizationPrintView";
 import { DossierPrimaryPhoto } from './components/DossierPrimaryPhoto';
-import { useMasterDossierPhotos } from './components/useMasterDossierPhotos';
+import { useMasterDossierPhotos, loadMasterDossierPhotos } from './components/useMasterDossierPhotos';
 import { readInstitutionalMasterMember } from '@/lib/institutionalPandillasReadActions';
 import { resolvePandillasUiScope, canEditPandillasLegacy, selectPandillasMasterGang, PANDILLAS_LEGACY_EDIT_MESSAGE, PANDILLAS_CASE_MESSAGE } from './pandillasUiScope';
 import { legacyMemberFingerprint } from './photo-evidence/identity';
@@ -411,6 +411,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
   const dossierPhotos = useMasterDossierPhotos(selectedGangId, integrantes,
     activeTab === 'integrantes' && !!consultationTarget && !!user, username);
 
+  const [organizationLoading, setOrganizationLoading] = useState(false);
   const [organization, setOrganization] = useState<{ scope: string; snapshot: GangOrganizationSnapshot; source: GangMember[] } | null>(null);
   useEffect(() => { setOrganization(null); }, [consultationScope, integrantes, activeTab]);
   // --- NEW GOVERNANCE GIP STATES ---
@@ -2695,7 +2696,14 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
             {organization && organization.scope === consultationScope && organization.source === integrantes && user && activeTab === "integrantes" && <GangOrganizationPrintView snapshot={organization.snapshot} onClose={() => setOrganization(null)} />}
             {/* REGISTERED DOSSIER GRID (6 cols) */}
             <div className="lg:col-span-6 space-y-4 bg-slate-900/30 border border-slate-800 rounded-2xl p-6 shadow-xl">
-              <CEIPOLButton disabled={!user || !consultationTarget} onClick={() => setOrganization({ scope: consultationScope, source: integrantes, snapshot: createGangOrganizationSnapshot(consultationTarget?.nombre || nombre, integrantes, dossierPhotos.map(photo => photo.primary?.derivedUrl)) })}>GENERAR ORGANIGRAMA DE LA PANDILLA</CEIPOLButton>
+              <CEIPOLButton disabled={!user || !consultationTarget} loading={organizationLoading} onClick={async () => {
+                setOrganizationLoading(true);
+                try {
+                  // Resolve fresh signed PRIMARY capabilities before freezing the printable snapshot.
+                  const photos = await loadMasterDossierPhotos(selectedGangId, integrantes).catch(() => []);
+                  setOrganization({ scope: consultationScope, source: integrantes, snapshot: createGangOrganizationSnapshot(consultationTarget?.nombre || nombre, integrantes, photos.map(photo => photo.primary?.derivedUrl)) });
+                } finally { setOrganizationLoading(false); }
+              }}>GENERAR ORGANIGRAMA DE LA PANDILLA</CEIPOLButton>
               <h3 className="text-sm font-black text-slate-200 uppercase tracking-wide border-b border-slate-800 pb-2">
                 📋 Dossier Criminal de la Pandilla ({integrantes.length} integrantes)
               </h3>

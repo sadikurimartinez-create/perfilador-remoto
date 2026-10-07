@@ -9,8 +9,8 @@ const render = (members = [member()]) => renderToStaticMarkup(<GangOrganizationP
 test('nombre de pandilla', () => expect(render()).toContain('Pandilla documental'));
 test('total', () => expect(render()).toContain('1 integrantes'));
 test('nombre y alias', () => { expect(render()).toContain('Nombre documental'); expect(render()).toContain('Alias documental'); });
-test('liderazgo explícito', () => expect(render([member('Líder')])).toContain('<h2>Liderazgo</h2>'));
-test('sin liderazgo inventado', () => expect(render()).not.toContain('<h2>Liderazgo</h2>'));
+test('liderazgo explícito', () => expect(render([member('Líder')])).toContain('<h2>Liderazgo documentado e integrantes</h2>'));
+test('sin liderazgo inventado', () => expect(render()).not.toContain('<h2>Liderazgo documentado e integrantes</h2>'));
 test('Sicario especial', () => { expect(render([member('Sicario')])).toContain('card sicario'); expect(render([member('Sicario')])).toContain('SICARIO'); });
 test.each(['Narcomenudista','Halcón','Chofer'] as const)('muestra %s', status => expect(render([member(status)])).toContain(status));
 test('función no registrada', () => expect(render()).toContain('Función no registrada'));
@@ -18,14 +18,14 @@ test('no asigna Integrante', () => expect(snapshot().members[0].estatusPandilla)
 test('PRIMARY antes de legacy', () => { const m = member(); m.fotografiaUrl = '/legacy.jpg'; expect(render([m])).toContain('src="https://example.test/primary.jpg"'); expect(render([m])).not.toContain('src="/legacy.jpg"'); });
 test('fallback legacy', () => { const m = member(); m.fotografiaUrl = '/legacy.jpg'; const s = createGangOrganizationSnapshot('Gang',[m],[]); expect(renderToStaticMarkup(<GangOrganizationPages snapshot={s} />)).toContain('src="/legacy.jpg"'); });
 test('fotografía ausente', () => expect(renderToStaticMarkup(<GangOrganizationPages snapshot={createGangOrganizationSnapshot('Gang',[member()],[])} />)).toContain('Fotografía no disponible'));
-test('múltiples miembros paginados sin pérdidas', () => { const s = snapshot(Array.from({length: 19}, () => member())); expect(organizationPages(s)).toHaveLength(5); expect(organizationPages(s).flatMap(p => p.members)).toHaveLength(19); });
+test('múltiples miembros paginados sin pérdidas', () => { const s = snapshot(Array.from({length: 19}, () => member())); expect(organizationPages(s)).toHaveLength(4); expect(organizationPages(s).flatMap(p => p.members)).toHaveLength(19); });
 test('sin controles editables', () => expect(render()).not.toMatch(/<(input|select|textarea|form)\b/));
 test('no muta datos recibidos ni requiere persistencia al renderizar', () => { const m = Object.freeze(member()); expect(() => render([m])).not.toThrow(); expect(m.estatusPandilla).toBeUndefined(); });
 test('snapshot independiente del estado posterior', () => { const m = member(); const s = snapshot([m]); m.nombre = 'Cambiado'; expect(renderToStaticMarkup(<GangOrganizationPages snapshot={s} />)).toContain('Nombre documental'); expect(s.members[0].nombre).not.toBe('Cambiado'); });
 test('vacío', () => expect(render([])).toContain('Sin integrantes registrados'));
 test('catálogo completo sin duplicados', () => { expect(GANG_ROLE_OPTIONS).toHaveLength(18); expect(new Set(GANG_ROLE_OPTIONS).size).toBe(18); });
 test('rol desconocido neutro', () => expect(getGangRoleVisualStyle('valor legacy')).toBe('neutral'));
-test('segundo al mando explícito', () => expect(render([member('Segundo al mando')])).toContain('<h2>Liderazgo</h2>'));
+test('segundo al mando explícito', () => expect(render([member('Segundo al mando')])).toContain('<h2>Liderazgo documentado e integrantes</h2>'));
 test.each(['load', 'error'])('espera imagen hasta %s', async eventName => {
   const img = Object.assign(new EventTarget(), { complete: false });
   let finished = false;
@@ -62,4 +62,23 @@ test('print mode restores body even without afterprint', () => {
   const printer = Object.assign(new EventTarget(), { print: () => expect(classes.has('printMode')).toBe(true) });
   printGangOrganization(body, printer);
   expect(classes.size).toBe(0);
+});
+test('six members including documented leadership fit a single page', () => {
+  const s = snapshot([member('Líder'), member('Segundo al mando'), member('Sicario'), member('Chofer'), member('Halcón'), member()]);
+  expect(organizationPages(s)).toHaveLength(1);
+  expect(organizationPages(s)[0].members).toHaveLength(6);
+  expect(renderToStaticMarkup(<GangOrganizationPages snapshot={s} />)).toContain('repeat(3, minmax(0, 1fr))');
+});
+test.each(GANG_ROLE_OPTIONS)('printable badge renders documented category %s', status => {
+  expect(render([member(status)])).toContain(status === 'Sicario' ? 'SICARIO' : status);
+});
+test('Sicario in rol also receives emphasized badge', () => {
+  const m = { ...member(), rol: 'Sicario' };
+  expect(render([m])).toContain('card sicario');
+  expect(render([m])).toContain('SICARIO');
+});
+test('snapshot retains one resolved PRIMARY per member in order', () => {
+  const s = createGangOrganizationSnapshot('Gang', [member(), { ...member(), nombre: 'Segundo' }], ['/one.jpg', '/two.jpg']);
+  expect(s.members.map(m => m.primaryUrl)).toEqual(['/one.jpg', '/two.jpg']);
+  expect(renderToStaticMarkup(<GangOrganizationPages snapshot={s} />)).toContain('src="/two.jpg"');
 });
