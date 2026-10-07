@@ -4,7 +4,7 @@ import { webcrypto, createHash } from 'crypto';
 import { saveAs } from 'file-saver';
 import JSZip from 'jszip';
 import { exportMemberDossierToWord } from '../src/lib/exportToWord';
-import { buildMemberDossierView, isDossierExportCurrent, resolveDossierWordTarget, prepareAuthorizedDossierWordView, dossierWordErrorMessage, DossierWordError } from '../src/modules/pandillas/memberDossierView';
+import { buildMemberDossierView, isDossierExportCurrent, resolveDossierWordTarget, prepareAuthorizedDossierWordView, dossierWordErrorMessage, logDossierWordStage, DossierWordError } from '../src/modules/pandillas/memberDossierView';
 import { legacyMemberFingerprint } from '../src/modules/pandillas/photo-evidence/identity';
 import type { DossierPhoto } from '../src/modules/pandillas/photo-evidence/dossierPhotoDisplay';
 
@@ -22,6 +22,55 @@ beforeEach(() => {
   fetchMock = jest.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(png, { headers: { 'content-type': 'image/png' } }));
 });
 afterEach(() => { fetchMock.mockRestore(); delete (globalThis as any).createImageBitmap; });
+
+test('autonomous dossier completes eight runtime stages without an active Project, geometry or import target', async () => {
+  const log = jest.spyOn(console, 'info').mockImplementation(() => {});
+  try {
+    await exportMemberDossierToWord(view(), { ...context, memberId: 'opaque-fingerprint' }, () => true);
+    const events = log.mock.calls.filter(([prefix]) => prefix === '[DOSSIER_WORD]').map(([, data]) => JSON.parse(data));
+    for (let n = 1; n <= 8; n++) expect(events.some(event => event.stage.startsWith(`DOSSIER_WORD_STAGE_${n}_`) && event.status === 'PASS')).toBe(true);
+    expect(events.every(event => !event.hasActiveProject && !event.projectDependencyDetected && event.memberId === 'opaque-fingerprint')).toBe(true);
+    expect(events.find(event => event.stage === 'DOSSIER_WORD_STAGE_8_DOWNLOAD' && event.status === 'PASS')).toMatchObject({ primaryMime: 'image/png', primaryBytes: png.length, docxBuildStarted: true, docxBuildCompleted: true });
+    const zip = await JSZip.loadAsync(await (saveAs as jest.Mock).mock.calls[0][0].arrayBuffer());
+    const xml = await zip.file('word/document.xml')!.async('string');
+    expect(xml).toContain('FICHA INSTITUCIONAL'); expect(xml).not.toMatch(/EXP:|geometría|hipótesis|dummy/i);
+  } finally { log.mockRestore(); }
+});
+test('nested causes and diagnostic identifiers cannot disclose signed URLs, cookies or tokens', () => {
+  const log = jest.spyOn(console, 'info').mockImplementation(() => {});
+  try {
+    const error = new Error('https://private.example/path?token=PRIVATE_TOKEN');
+    (error as Error & { cause?: unknown }).cause = new Error('Cookie=PRIVATE_COOKIE /private/storage/path');
+    logDossierWordStage('DOSSIER_WORD_STAGE_6_PACKER', 'FAIL', {
+      memberId: 'https://private.example?token=PRIVATE_TOKEN', hasPrimaryPhoto: true,
+      additionalPhotoCount: 0, hasActiveProject: false, projectDependencyDetected: false,
+      primaryMime: 'Cookie=PRIVATE_COOKIE', directPandillasEntry: true,
+    }, error);
+    const event = JSON.parse(log.mock.calls[0][1]);
+    expect(event.errorCause).toEqual({ errorName: 'Error', errorMessage: 'UNCLASSIFIED_RUNTIME_FAILURE' });
+    expect(JSON.stringify(log.mock.calls)).not.toMatch(/PRIVATE_TOKEN|PRIVATE_COOKIE|https:|\/private\/storage/);
+    (error as Error & { cause?: unknown }).cause = new ReferenceError('Buffer is not defined');
+    logDossierWordStage('DOSSIER_WORD_STAGE_6_PACKER', 'FAIL', { hasPrimaryPhoto: true, additionalPhotoCount: 0, hasActiveProject: false, projectDependencyDetected: false }, error);
+    expect(JSON.parse(log.mock.calls.at(-1)![1]).errorCause.errorMessage).toBe('Buffer is not defined');
+  } finally { log.mockRestore(); }
+});
+test('runtime failure identifies the first failed stage without logging private exceptions', async () => {
+  const log = jest.spyOn(console, 'info').mockImplementation(() => {});
+  try {
+    await expect(exportMemberDossierToWord({ ...view(), name: '' }, context, () => true)).rejects.toMatchObject({ code: 'BUILD_FAILED' });
+    const events = log.mock.calls.map(([, data]) => JSON.parse(data));
+    expect(events.filter(event => event.status === 'FAIL')).toEqual([expect.objectContaining({ stage: 'DOSSIER_WORD_STAGE_4_RENDERER', errorName: 'Error', errorMessage: 'DOSSIER_INCOMPLETE' })]);
+    expect(events.some(event => event.stage === 'DOSSIER_WORD_STAGE_6_PACKER')).toBe(false);
+    logDossierWordStage('DOSSIER_WORD_STAGE_6_PACKER', 'FAIL', { hasPrimaryPhoto: true, additionalPhotoCount: 0, hasActiveProject: false, projectDependencyDetected: false }, new Error('https://private/path?token=SECRET Cookie=PRIVATE'));
+    expect(JSON.stringify(log.mock.calls)).not.toMatch(/SECRET|Cookie|https:|signature/);
+    logDossierWordStage('DOSSIER_WORD_STAGE_4_RENDERER', 'FAIL', { hasPrimaryPhoto: true, additionalPhotoCount: 0, hasActiveProject: false, projectDependencyDetected: false }, new TypeError("Cannot read properties of undefined (reading 'map')"));
+    expect(JSON.parse(log.mock.calls.at(-1)![1]).errorMessage).toContain("reading 'map'");
+  } finally { log.mockRestore(); }
+});
+test('absent PRIMARY is an explicit error before packaging or download', async () => {
+  await expect(exportMemberDossierToWord({ ...view(), photos: [] }, context, () => true)).rejects.toMatchObject({ code: 'PRIMARY_UNAVAILABLE', stage: 'PHOTO' });
+  expect(fetchMock).not.toHaveBeenCalled(); expect(saveAs).not.toHaveBeenCalled();
+});
 
 test('identical parent rerender during Word download is allowed; actual scope/member/tab changes block', async () => {
   const expected = { scope: 'P/G/user', selected: member, members: [member], enabled: true };

@@ -1007,21 +1007,53 @@ function denueContextualAnnexSummary(generationContext: any) {
 /** Read-only member consultation export. Reuses the Document Engine without report publication side effects. */
 export async function exportMemberDossierToWord(view: import('@/modules/pandillas/memberDossierView').MemberDossierView,
   context: import('@/document-engine/renderers/MemberDossierWordRenderer').DossierWordContext, isCurrent: () => boolean) {
-  const { DossierWordError } = await import('@/modules/pandillas/memberDossierView');
-  if (!context.projectId || !context.gangId || !context.actor || !isCurrent()) throw new DossierWordError('CONTEXT_CHANGED', 'BUILD');
+  const { DossierWordError, logDossierWordStage } = await import('@/modules/pandillas/memberDossierView');
+  const diagnostics: import('@/modules/pandillas/memberDossierView').DossierWordDiagnostics = { memberId: context.memberId, gangId: context.gangId, hasPrimaryPhoto: view.photos.some(photo => photo.label === 'Fotografía principal'),
+    additionalPhotoCount: view.photos.filter(photo => photo.label === 'Otra fotografía asociada').length, hasActiveProject: !!context.hasActiveProject, projectDependencyDetected: false };
+  let stage: import('@/modules/pandillas/memberDossierView').DossierWordStage = 'DOSSIER_WORD_STAGE_1_VIEWMODEL';
+  diagnostics.directPandillasEntry = typeof window !== 'undefined' && window.location.pathname === '/pandillas';
+  const observe = (next: typeof stage, status: 'START' | 'PASS', image?: { bytes: number; mime: string }) => {
+    stage = next;
+    if (next === 'DOSSIER_WORD_STAGE_2_PRIMARY_PHOTO' && image) { diagnostics.primaryMime = image.mime; diagnostics.primaryBytes = image.bytes; }
+    if (next === 'DOSSIER_WORD_STAGE_4_RENDERER' && status === 'START') diagnostics.docxBuildStarted = true;
+    if (next === 'DOSSIER_WORD_STAGE_7_BLOB' && status === 'PASS') diagnostics.docxBuildCompleted = true;
+    logDossierWordStage(stage, status, diagnostics, undefined, image);
+  };
+  observe(stage, 'START');
+  if (!context.projectId || !context.gangId || !context.actor || !isCurrent()) {
+    const error = new DossierWordError('CONTEXT_CHANGED', 'BUILD');
+    logDossierWordStage(stage, 'FAIL', diagnostics, error); throw error;
+  }
   let blob: Blob;
   try {
+    observe(stage, 'PASS');
     const { hydrateDossierWordImages, renderMemberDossierWord } = await import('@/document-engine/renderers/MemberDossierWordRenderer');
-    const images = await hydrateDossierWordImages(view);
-    const document = renderMemberDossierWord(view, images, context);
+    if (!diagnostics.hasPrimaryPhoto) {
+      observe('DOSSIER_WORD_STAGE_2_PRIMARY_PHOTO', 'START');
+      throw new DossierWordError('PRIMARY_UNAVAILABLE', 'PHOTO');
+    }
+    const images = await hydrateDossierWordImages(view, observe);
+    const document = renderMemberDossierWord(view, images, context, observe);
+    observe('DOSSIER_WORD_STAGE_6_PACKER', 'START');
     blob = await Packer.toBlob(document);
+    observe('DOSSIER_WORD_STAGE_6_PACKER', 'PASS');
+    observe('DOSSIER_WORD_STAGE_7_BLOB', 'START');
+    if (!(blob instanceof Blob) || !blob.size) throw new Error('DOSSIER_BLOB_INVALID');
+    observe('DOSSIER_WORD_STAGE_7_BLOB', 'PASS');
   } catch (error) {
+    logDossierWordStage(stage, 'FAIL', diagnostics, error);
     if (error instanceof DossierWordError) throw error;
     throw new DossierWordError('BUILD_FAILED', 'BUILD');
   }
-  if (!isCurrent()) throw new DossierWordError('CONTEXT_CHANGED', 'BUILD');
-  try { saveAs(blob, `Ficha_integrante_${sanitizeExpedienteFilePart(view.name)}.docx`); }
-  catch { throw new DossierWordError('DOWNLOAD_FAILED', 'DOWNLOAD'); }
+  if (!isCurrent()) {
+    const error = new DossierWordError('CONTEXT_CHANGED', 'BUILD');
+    logDossierWordStage(stage, 'FAIL', diagnostics, error); throw error;
+  }
+  try {
+    observe('DOSSIER_WORD_STAGE_8_DOWNLOAD', 'START');
+    saveAs(blob, `Ficha_integrante_${sanitizeExpedienteFilePart(view.name)}.docx`);
+    observe('DOSSIER_WORD_STAGE_8_DOWNLOAD', 'PASS');
+  } catch (error) { logDossierWordStage(stage, 'FAIL', diagnostics, error); throw new DossierWordError('DOWNLOAD_FAILED', 'DOWNLOAD'); }
 }
 
 export async function exportToWord(

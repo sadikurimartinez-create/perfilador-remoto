@@ -15,8 +15,9 @@ import {
 } from "./pandillas.mapper";
 import { PandillasService } from "./pandillas.service";
 import { DossierPrimaryPhoto, useDossierPhotos } from './components/DossierPrimaryPhoto';
+import { legacyMemberFingerprint } from './photo-evidence/identity';
 import { MemberDossierPanel } from './components/MemberDossierConsultation';
-import { buildMemberDossierView, initialDossierConsultation, dossierConsultationTransition, isDossierExportCurrent, resolveDossierWordTarget, prepareAuthorizedDossierWordView, DossierWordError, type DossierConsultationState } from './memberDossierView';
+import { buildMemberDossierView, initialDossierConsultation, dossierConsultationTransition, isDossierExportCurrent, resolveDossierWordTarget, prepareAuthorizedDossierWordView, logDossierWordStage, DossierWordError, type DossierConsultationState } from './memberDossierView';
 import { parseAndValidateDossierImportPayload, reviewDossierImport, canApplyDossierImport,
   buildDossierImportResult, verifyDossierImportWrite, type DossierImportPayload, type DossierImportReview, parseAndValidateR3Payload, reviewR3Update, canApplyR3Update, buildR3UpdateResult, type R3DossierPayload, type R3Review } from "./pandillasDossierImport";
 import { PandillasEngine } from "./pandillas.engine";
@@ -393,8 +394,11 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
 
   // --- INTERACTION & EDITING SUB-STATES ---
   const [activeTab, setActiveTab] = useState<"dashboard" | "registro" | "integrantes" | "relaciones" | "geointeligencia" | "barridos" | "gip">("dashboard");
-  const dossierPhotos = useDossierPhotos(projectId || activeProject?.id, selectedGangId, integrantes,
-    activeTab === 'integrantes' && !!dossierTarget && !!user, username);
+  // READ scope belongs to the consulted gang, independently of the write/import target.
+  const consultationTarget = useMemo(() => resolveDossierWordTarget(storedGangs, selectedGangId), [storedGangs, selectedGangId]);
+  const consultationScope = `${selectedGangId}\u0000${consultationTarget?.projectId || ''}\u0000${username}`;
+  const dossierPhotos = useDossierPhotos(consultationTarget?.projectId, selectedGangId, integrantes,
+    activeTab === 'integrantes' && !!consultationTarget && !!user, username);
 
   // --- NEW GOVERNANCE GIP STATES ---
   const [candidates, setCandidates] = useState<GangMemberCandidate[]>([]);
@@ -453,26 +457,38 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
     }
   }, []);
 
-  const [consultationState, setConsultationState] = useState<DossierConsultationState & { scope: string }>({ ...initialDossierConsultation, scope: dossierContextKey });
-  const consultation = consultationState.scope === dossierContextKey ? consultationState : initialDossierConsultation;
-  useEffect(() => { setConsultationState({ ...initialDossierConsultation, scope: dossierContextKey }); }, [dossierContextKey]);
-  const consultationGuard = useRef({ scope: dossierContextKey, selected: consultation.selected, members: integrantes, enabled: activeTab === 'integrantes' });
-  consultationGuard.current = { scope: dossierContextKey, selected: consultation.selected, members: integrantes, enabled: activeTab === 'integrantes' };
+  const [consultationState, setConsultationState] = useState<DossierConsultationState & { scope: string }>({ ...initialDossierConsultation, scope: consultationScope });
+  const consultation = consultationState.scope === consultationScope ? consultationState : initialDossierConsultation;
+  useEffect(() => { setConsultationState({ ...initialDossierConsultation, scope: consultationScope }); }, [consultationScope]);
+  const consultationGuard = useRef({ scope: consultationScope, selected: consultation.selected, members: integrantes, enabled: activeTab === 'integrantes' });
+  consultationGuard.current = { scope: consultationScope, selected: consultation.selected, members: integrantes, enabled: activeTab === 'integrantes' };
   const changeConsultation = (action: Parameters<typeof dossierConsultationTransition>[1]) =>
-    setConsultationState({ ...dossierConsultationTransition(consultation, action), scope: dossierContextKey });
+    setConsultationState({ ...dossierConsultationTransition(consultation, action), scope: consultationScope });
   const consultedIndex = consultation.selected ? integrantes.indexOf(consultation.selected) : -1;
-  const consultedView = consultedIndex >= 0 ? buildMemberDossierView(integrantes[consultedIndex], dossierTarget?.nombre || nombre, dossierPhotos[consultedIndex]) : null;
+  const consultedView = consultedIndex >= 0 ? buildMemberDossierView(integrantes[consultedIndex], consultationTarget?.nombre || nombre, dossierPhotos[consultedIndex]) : null;
   const exportConsultedMember = async () => {
     if (!user) throw new DossierWordError('SESSION_EXPIRED', 'AUTHORIZATION');
-    const wordTarget = resolveDossierWordTarget(storedGangs, selectedGangId, projectId || activeProject?.id);
+    const wordTarget = consultationTarget;
     if (!consultedView || !wordTarget) throw new DossierWordError('CONTEXT_CHANGED', 'AUTHORIZATION');
     const member = integrantes[consultedIndex];
     const expected = consultationGuard.current;
     const isCurrent = () => isDossierExportCurrent(consultationGuard.current, expected);
-    const fresh = await prepareAuthorizedDossierWordView(consultedView, member, wordTarget.projectId!, selectedGangId);
-    const { exportMemberDossierToWord } = await import('@/lib/exportToWord');
-    if (!isCurrent()) throw new DossierWordError('CONTEXT_CHANGED', 'BUILD');
-    await exportMemberDossierToWord(fresh, { projectId: wordTarget.projectId!, gangId: selectedGangId, actor: username }, isCurrent);
+    const memberId = await legacyMemberFingerprint(member);
+    let fresh: typeof consultedView;
+    let exporter: typeof import('@/lib/exportToWord');
+    const diagnostics = { memberId, gangId: selectedGangId, hasPrimaryPhoto: consultedView.photos.some(photo => photo.label === 'Fotografía principal'),
+      additionalPhotoCount: consultedView.photos.filter(photo => photo.label === 'Otra fotografía asociada').length, hasActiveProject: !!activeProject, projectDependencyDetected: false,
+      directPandillasEntry: window.location.pathname === '/pandillas' };
+    logDossierWordStage('DOSSIER_WORD_STAGE_1_VIEWMODEL', 'START', diagnostics);
+    try {
+      fresh = await prepareAuthorizedDossierWordView(consultedView, member, wordTarget.projectId!, selectedGangId);
+      exporter = await import('@/lib/exportToWord');
+      if (!isCurrent()) throw new DossierWordError('CONTEXT_CHANGED', 'BUILD');
+      logDossierWordStage('DOSSIER_WORD_STAGE_1_VIEWMODEL', 'PASS', diagnostics);
+    } catch (error) { logDossierWordStage('DOSSIER_WORD_STAGE_1_VIEWMODEL', 'FAIL', diagnostics, error); throw error; }
+    const { exportMemberDossierToWord } = exporter;
+    await exportMemberDossierToWord(fresh, { projectId: wordTarget.projectId!, gangId: selectedGangId, actor: username,
+      memberId, hasActiveProject: !!activeProject }, isCurrent);
   };
   const [editingMemberIndex, setEditingMemberIndex] = useState<number | null>(null);
   const [tempMember, setTempMember] = useState<Partial<GangMember>>({

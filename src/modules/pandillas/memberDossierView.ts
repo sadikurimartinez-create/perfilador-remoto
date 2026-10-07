@@ -21,6 +21,37 @@ export class DossierWordError extends Error {
     super(code); this.name = 'DossierWordError';
   }
 }
+export type DossierWordStage = 'DOSSIER_WORD_STAGE_1_VIEWMODEL' | 'DOSSIER_WORD_STAGE_2_PRIMARY_PHOTO' | 'DOSSIER_WORD_STAGE_3_ADDITIONAL_PHOTOS' | 'DOSSIER_WORD_STAGE_4_RENDERER' | 'DOSSIER_WORD_STAGE_5_DOCUMENT_COMPOSITION' | 'DOSSIER_WORD_STAGE_6_PACKER' | 'DOSSIER_WORD_STAGE_7_BLOB' | 'DOSSIER_WORD_STAGE_8_DOWNLOAD';
+export interface DossierWordDiagnostics {
+  memberId?: string; gangId?: string; hasPrimaryPhoto: boolean; additionalPhotoCount: number;
+  hasActiveProject: boolean; projectDependencyDetected: boolean;
+  directPandillasEntry?: boolean; primaryMime?: string; primaryBytes?: number;
+  docxBuildStarted?: boolean; docxBuildCompleted?: boolean;
+}
+/** Explicit allowlist: never serialize the original exception, URL, member record or project. */
+export function logDossierWordStage(stage: DossierWordStage, status: 'START' | 'PASS' | 'FAIL', diagnostics: DossierWordDiagnostics, error?: unknown,
+  image?: { bytes: number; mime: string }) {
+  const names = ['Error', 'TypeError', 'ReferenceError', 'InvalidStateError', 'DossierWordError'];
+  const messages = ['DOSSIER_INCOMPLETE', 'DOSSIER_EMPTY_SECTION', 'DOSSIER_IMAGE_UNAVAILABLE', 'DOSSIER_IMAGE_TYPE', 'DOSSIER_IMAGE_SIZE', 'DOSSIER_IMAGE_HASH', 'DOSSIER_IMAGE_DIMENSIONS', 'DOSSIER_BLOB_INVALID'];
+  const errorName = error instanceof Error && names.includes(error.name) ? error.name : error ? 'Error' : undefined;
+  const runtimePattern = /^(?:[A-Za-z_$][\w$]{0,60} is not defined|Cannot access '[A-Za-z_$][\w$]{0,60}' before initialization|Cannot read properties of (?:undefined|null) \(reading '[A-Za-z_$][\w$]{0,60}'\)|[A-Za-z_$][\w$.]{0,60} is not a function)$/;
+  const errorMessage = error instanceof DossierWordError ? error.code : error instanceof Error && (messages.includes(error.message) || runtimePattern.test(error.message)) ? error.message : error ? 'UNCLASSIFIED_RUNTIME_FAILURE' : undefined;
+  const cause = error instanceof Error ? (error as Error & { cause?: unknown }).cause : undefined;
+  const errorCause = cause === undefined ? undefined : {
+    errorName: cause instanceof Error && names.includes(cause.name) ? cause.name : 'Error',
+    errorMessage: cause instanceof DossierWordError ? cause.code : cause instanceof Error && (messages.includes(cause.message) || runtimePattern.test(cause.message)) ? cause.message : 'UNCLASSIFIED_RUNTIME_FAILURE',
+  };
+  console.info('[DOSSIER_WORD]', JSON.stringify({ stage, status, errorName, errorMessage,
+    errorCause,
+    memberId: diagnostics.memberId && /^[\w-]{1,128}$/.test(diagnostics.memberId) ? diagnostics.memberId : undefined, hasPrimaryPhoto: diagnostics.hasPrimaryPhoto,
+    additionalPhotoCount: diagnostics.additionalPhotoCount, hasActiveProject: diagnostics.hasActiveProject,
+    projectDependencyDetected: diagnostics.projectDependencyDetected,
+    directPandillasEntry: diagnostics.directPandillasEntry,
+    primaryMime: ['image/jpeg', 'image/png', 'image/webp'].includes(diagnostics.primaryMime || '') ? diagnostics.primaryMime : undefined,
+    primaryBytes: Number.isFinite(diagnostics.primaryBytes) ? diagnostics.primaryBytes : undefined,
+    docxBuildStarted: !!diagnostics.docxBuildStarted, docxBuildCompleted: !!diagnostics.docxBuildCompleted,
+    ...(image ? { bytes: image.bytes, mime: ['image/jpeg', 'image/png', 'image/webp'].includes(image.mime) ? image.mime : undefined } : {}) }));
+}
 export function dossierWordErrorMessage(error: unknown): string {
   const messages: Record<DossierWordError['code'], string> = {
     SESSION_EXPIRED: 'Sesión expirada. Inicie sesión nuevamente para generar Word.',
@@ -31,7 +62,7 @@ export function dossierWordErrorMessage(error: unknown): string {
     BUILD_FAILED: 'Error al construir el documento Word.', DOWNLOAD_FAILED: 'Error al descargar el archivo Word.',
   };
   const controlled = error instanceof DossierWordError ? error : new DossierWordError('BUILD_FAILED', 'BUILD');
-  console.warn('[DOSSIER_WORD]', { code: controlled.code, stage: controlled.stage, ...(controlled.httpStatus ? { httpStatus: controlled.httpStatus } : {}) });
+  console.warn('[DOSSIER_WORD]', JSON.stringify({ code: controlled.code, stage: controlled.stage, ...(controlled.httpStatus ? { httpStatus: controlled.httpStatus } : {}) }));
   return messages[controlled.code];
 }
 export async function prepareAuthorizedDossierWordView(view: MemberDossierView, member: GangMember, projectId: string, gangId: string): Promise<MemberDossierView> {
