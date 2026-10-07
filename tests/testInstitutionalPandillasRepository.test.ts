@@ -1,4 +1,6 @@
 jest.mock('server-only', () => ({}), { virtual: true });
+jest.mock('next/headers', () => ({ cookies: jest.fn() }));
+jest.mock('@/services/institutionalPandillasPhotoBoundary', () => ({ resolveGangPrimaryPhotoUrls: jest.fn() }));
 jest.mock('@/lib/institutionalCollectionActions', () => ({ readInstitutionalCollection: jest.fn() }));
 import { webcrypto } from 'crypto';
 import { readFileSync } from 'fs';

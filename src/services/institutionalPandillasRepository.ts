@@ -1,4 +1,7 @@
 import 'server-only';
+import { cookies } from 'next/headers';
+import { resolvePandillasCustodyScope } from './pandillasCustodyResolver';
+import { resolveGangPrimaryPhotoUrls } from './institutionalPandillasPhotoBoundary';
 import { readInstitutionalCollection } from '@/lib/institutionalCollectionActions';
 import type { GangEntity } from '@/modules/pandillas/pandillas.mapper';
 import { resolveLegacyPandillasCustody, resolvePandillasMasterVersion } from '@/modules/pandillas/pandillasMasterContracts';
@@ -23,7 +26,7 @@ export class InstitutionalPandillasRepository {
     return matches[0] ?? null;
   }
   async resolveCustodyScope(gangId: string) {
-    return (await this.getMasterGang(gangId))?.custody ?? null;
+    return resolvePandillasCustodyScope(gangId);
   }
   async getMasterVersion(gangId: string) {
     return (await this.getMasterGang(gangId))?.scope.version ?? null;
@@ -35,5 +38,27 @@ export class InstitutionalPandillasRepository {
     const matches = gang.integrantes.filter(member => member.nombre === selector.legacyMemberName);
     if (matches.length > 1) throw new Error('PANDILLAS_MEMBER_RECONCILIATION_REQUIRED');
     return matches[0] ?? null;
+  }
+  /** Uses opaque R4 member identity, not a name/index/fingerprint as identity.
+   * The existing boundary verifies identity binding, review, hashes and fresh READ grants. */
+  async resolveMasterMemberEvidence(gangId: string, memberIdentityId: string) {
+    if (!memberIdentityId || typeof memberIdentityId !== 'string') throw new Error('PANDILLAS_MEMBER_ID_REQUIRED');
+    const custody = await this.resolveCustodyScope(gangId);
+    if (!custody) return null;
+    const result = await resolveGangPrimaryPhotoUrls(cookies().get('ceipol_session')?.value,
+      { projectId: custody.custodyProjectId, gangId: custody.masterGangId });
+    if (result.projectId !== custody.custodyProjectId || result.gangId !== custody.masterGangId) {
+      throw new Error('PANDILLAS_EVIDENCE_SCOPE_MISMATCH');
+    }
+    const matches = result.items.filter(item => item.memberId === memberIdentityId);
+    if (matches.length > 1) throw new Error('PANDILLAS_MEMBER_RECONCILIATION_REQUIRED');
+    if (!matches.length) return null;
+    return { scope: { kind: 'MASTER' as const, gangId, memberId: memberIdentityId, version: custody.masterVersion },
+      custody, expiresAt: result.expiresAt, evidence: matches[0] };
+  }
+  async resolveMasterMemberPrimaryPhoto(gangId: string, memberIdentityId: string) {
+    const result = await this.resolveMasterMemberEvidence(gangId, memberIdentityId);
+    return result ? { scope: result.scope, custody: result.custody, expiresAt: result.expiresAt,
+      primaryPhoto: result.evidence.primaryPhoto } : null;
   }
 }
