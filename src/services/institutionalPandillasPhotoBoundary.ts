@@ -8,7 +8,7 @@ import { expectedPhotoVersion, photoId, primarySelectionId } from '@/modules/pan
 import { legacyMemberFingerprint, verifyLegacyBinding } from '@/modules/pandillas/photo-evidence/identity';
 import { validatePhotoAsset } from '@/modules/pandillas/photo-evidence/association';
 import { selectPrimaryPhoto } from '@/modules/pandillas/photo-evidence/primarySelection';
-import { resolvePrimaryPhotoMetadata } from '@/modules/pandillas/photo-evidence/resolver';
+import { resolvePrimaryPhotoMetadata, resolveAdditionalPhotoMetadata } from '@/modules/pandillas/photo-evidence/resolver';
 import { assertPhotoAuditSafe } from '@/modules/pandillas/photo-evidence/audit';
 import type { PhotoAsset } from '@/modules/pandillas/photo-evidence/contracts';
 import type { MultimodalEvidenceContract } from '@/utils/multimodalEvidenceContract';
@@ -182,12 +182,15 @@ export async function resolveGangPrimaryPhotoUrls(session: unknown, input: Scope
     const associationIds = [...selections.values()].filter(row => row && typeof row.associationId === 'string').map(row => row.associationId)
       .filter(id => { try { photoId(id); return true; } catch { return false; } });
     const associations = await getAll(associationIds.map(id => `${collection(input.projectId, 'Associations')}/${id}`));
-    const documentIds = [...associations.values()].filter(row => row && typeof row.documentId === 'string').map(row => row.documentId)
+    const additionalSnapshot = await tx.get(db.collection(collection(input.projectId, 'Associations')).where('gangId', '==', input.gangId).limit(1001));
+    if (additionalSnapshot.size > 1000) throw new Error('R4_DOSSIER_CAPACITY');
+    const additionalRows = additionalSnapshot.docs.map(doc => ({ ...doc.data(), _documentId: doc.id })) as Array<PhotoAssociation & { _documentId: string }>;
+    const documentIds = [...associations.values(), ...additionalRows].filter(row => row && typeof row.documentId === 'string').map(row => row.documentId)
       .filter(id => { try { photoId(id); return true; } catch { return false; } });
     const documents = await getAll(documentIds.map(id => `projects/${input.projectId}/documents/${id}`));
     return Promise.all(gang.integrantes.map(async (member: any) => {
       const memberFingerprint = await legacyMemberFingerprint(member);
-      const fallback = { memberFingerprint, memberId: null as string | null, photo: null as ReturnType<typeof resolvePrimaryPhotoMetadata>, derivedSize: 0 };
+      const fallback = { memberFingerprint, memberId: null as string | null, photo: null as ReturnType<typeof resolvePrimaryPhotoMetadata>, derivedSize: 0, additional: [] as Array<{ photo: ReturnType<typeof resolveAdditionalPhotoMetadata>; derivedSize: number }> };
       // The image injection deliberately excludes these documentary identities.
       const normalized = String(member.nombre).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
       if (/yordi alejandro|angel ricardo gonzalez sanchez/.test(normalized)) return fallback;
@@ -198,8 +201,18 @@ export async function resolveGangPrimaryPhotoUrls(session: unknown, input: Scope
       try {
         if (!valid.includes(identity)) return fallback;
         await verifyLegacyBinding(gang, identity);
+        const additional = additionalRows.filter(a => a.id === a._documentId && a.memberIdentityId === identity.id).flatMap(a => {
+          try {
+            const doc = documents.get(a.documentId);
+            if (doc?.multimodalEvidence?.humanValidationStatus !== 'APPROVED'
+              || doc.multimodalEvidence.documentId !== doc.id || doc.multimodalEvidence.expedienteId !== input.projectId
+              || doc.multimodalEvidence.forensicIntegrity?.hashStatus !== 'REAL_FILE_HASH'
+              || doc.multimodalEvidence.forensicIntegrity?.rawSha256 !== doc.photoAsset?.original?.sha256) return [];
+            return [{ photo: resolveAdditionalPhotoMetadata(input.projectId, input.gangId, identity, a, doc), derivedSize: doc.photoAsset.derived.size }];
+          } catch { return []; }
+        }).sort((a, b) => a.photo.associationId.localeCompare(b.photo.associationId));
         const selection = selections.get(primarySelectionId(input.gangId, identity.id));
-        if (!selection) return { ...fallback, memberId: identity.id };
+        if (!selection) return { ...fallback, memberId: identity.id, additional };
         const association = associations.get(selection.associationId);
         const document = association && documents.get(association.documentId);
         if (!document || document.id !== association.documentId || document.multimodalEvidence?.humanValidationStatus !== 'APPROVED'
@@ -207,7 +220,7 @@ export async function resolveGangPrimaryPhotoUrls(session: unknown, input: Scope
           || document.multimodalEvidence?.forensicIntegrity?.hashStatus !== 'REAL_FILE_HASH'
           || document.multimodalEvidence?.forensicIntegrity?.rawSha256 !== document.photoAsset?.original?.sha256) return { ...fallback, memberId: identity.id };
         const photo = resolvePrimaryPhotoMetadata(input.projectId, input.gangId, identity.id, identity, selection, association, document);
-        return { memberFingerprint, memberId: identity.id, photo, derivedSize: document.photoAsset.derived.size };
+        return { memberFingerprint, memberId: identity.id, photo, derivedSize: document.photoAsset.derived.size, additional };
       } catch { return fallback; }
     }));
   }, { readOnly: true });
@@ -216,21 +229,38 @@ export async function resolveGangPrimaryPhotoUrls(session: unknown, input: Scope
   if (!fresh.allowed) throw new ProjectAccessError(fresh.code);
   if (fresh.actor.institutionalUserId !== grant.actor.institutionalUserId) throw new ProjectAccessError('PROJECT_ACCESS_DENIED');
   const expiresAt = deps.now() + 120000;
-  const bucket = resolved.some(row => row.photo) ? (overrides.bucket ?? getInstitutionalAdminBucket)() : null;
-  const items = await Promise.all(resolved.map(async row => {
-    const fallback = { memberId: row.memberId, memberFingerprint: row.memberFingerprint, hasPrimaryPhoto: false, assetId: null as string | null, derivedUrl: null as string | null };
-    if (!row.photo || !bucket) return fallback;
+  const bucket = resolved.some(row => row.photo || row.additional.length) ? (overrides.bucket ?? getInstitutionalAdminBucket)() : null;
+  const signPhoto = async (entry: { photo: NonNullable<ReturnType<typeof resolvePrimaryPhotoMetadata>> | ReturnType<typeof resolveAdditionalPhotoMetadata>; derivedSize: number }) => {
+    if (!bucket) return null;
     try {
-      const file = bucket.file(row.photo.storagePathDerived);
+      const { photo } = entry;
+      const file = bucket.file(photo.storagePathDerived);
       const [metadata] = await file.getMetadata();
-      if (metadata.contentType !== row.photo.mimeType || !metadata.generation) return fallback;
-      await verifyPandillasStoredPhotoFile(bucket, { storagePath: row.photo.storagePathDerived, sha256: row.photo.derivedSha256,
-        mimeType: row.photo.mimeType as 'image/jpeg' | 'image/png', size: row.derivedSize, width: row.photo.width, height: row.photo.height }, metadata);
-      const [derivedUrl] = await file.getSignedUrl({ version: 'v4', action: 'read', expires: expiresAt,
-        queryParams: { generation: String(metadata.generation) } });
-      if (!derivedUrl.startsWith('https://')) return fallback;
-      return { ...fallback, hasPrimaryPhoto: true, assetId: row.photo.documentId, derivedUrl };
-    } catch { return fallback; }
+      if (metadata.contentType !== photo.mimeType || !metadata.generation) return null;
+      await verifyPandillasStoredPhotoFile(bucket, { storagePath: photo.storagePathDerived, sha256: photo.derivedSha256,
+        mimeType: photo.mimeType as 'image/jpeg' | 'image/png', size: entry.derivedSize, width: photo.width, height: photo.height }, metadata);
+      const [derivedUrl] = await file.getSignedUrl({ version: 'v4', action: 'read', expires: expiresAt, queryParams: { generation: String(metadata.generation) } });
+      if (!derivedUrl.startsWith('https://')) return null;
+      return { assetId: photo.documentId, associationId: photo.associationId, derivedSha256: photo.derivedSha256,
+        documentVersion: photo.documentVersion, associationVersion: photo.associationVersion,
+        ...('selectionVersion' in photo ? { selectionVersion: photo.selectionVersion } : {}),
+        mimeType: photo.mimeType, width: photo.width, height: photo.height, derivedUrl };
+    } catch { return null; }
+  };
+  const items = await Promise.all(resolved.map(async row => {
+    const primary = row.photo ? await signPhoto({ photo: row.photo, derivedSize: row.derivedSize }) : null;
+    // Exclude selected PRIMARY by asset AND hash even when its Storage resource is unavailable.
+    const seenAssets = new Set(row.photo ? [row.photo.documentId] : []);
+    const seenHashes = new Set(row.photo ? [row.photo.derivedSha256] : []);
+    const additionalPhotos = [];
+    for (const entry of row.additional) {
+      if (seenAssets.has(entry.photo.documentId) || seenHashes.has(entry.photo.derivedSha256)) continue;
+      seenAssets.add(entry.photo.documentId); seenHashes.add(entry.photo.derivedSha256);
+      const photo = await signPhoto(entry);
+      if (photo) additionalPhotos.push(photo);
+    }
+    return { memberId: row.memberId, memberFingerprint: row.memberFingerprint, hasPrimaryPhoto: !!primary,
+      assetId: primary?.assetId ?? null, derivedUrl: primary?.derivedUrl ?? null, primaryPhoto: primary, additionalPhotos };
   }));
   const final = await deps.authorize({ sessionToken: session, projectId: input.projectId, action: 'READ' });
   if (!final.allowed) throw new ProjectAccessError(final.code);

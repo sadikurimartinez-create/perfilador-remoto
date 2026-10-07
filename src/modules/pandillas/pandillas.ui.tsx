@@ -14,7 +14,11 @@ import {
   calculateSimilarity
 } from "./pandillas.mapper";
 import { PandillasService } from "./pandillas.service";
-import { DossierPrimaryPhoto, useDossierPrimaryPhotoUrls } from './components/DossierPrimaryPhoto';
+import { DossierPrimaryPhoto, useDossierPhotos } from './components/DossierPrimaryPhoto';
+import { MemberDossierPanel } from './components/MemberDossierConsultation';
+import { buildMemberDossierView, initialDossierConsultation, dossierConsultationTransition, type DossierConsultationState } from './memberDossierView';
+import { bindDossierPhotos } from './photo-evidence/dossierPhotoDisplay';
+import { legacyMemberFingerprint } from './photo-evidence/identity';
 import { parseAndValidateDossierImportPayload, reviewDossierImport, canApplyDossierImport,
   buildDossierImportResult, verifyDossierImportWrite, type DossierImportPayload, type DossierImportReview, parseAndValidateR3Payload, reviewR3Update, canApplyR3Update, buildR3UpdateResult, type R3DossierPayload, type R3Review } from "./pandillasDossierImport";
 import { PandillasEngine } from "./pandillas.engine";
@@ -391,7 +395,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
 
   // --- INTERACTION & EDITING SUB-STATES ---
   const [activeTab, setActiveTab] = useState<"dashboard" | "registro" | "integrantes" | "relaciones" | "geointeligencia" | "barridos" | "gip">("dashboard");
-  const dossierPrimaryUrls = useDossierPrimaryPhotoUrls(projectId || activeProject?.id, selectedGangId, integrantes,
+  const dossierPhotos = useDossierPhotos(projectId || activeProject?.id, selectedGangId, integrantes,
     activeTab === 'integrantes' && !!dossierTarget && !!user, username);
 
   // --- NEW GOVERNANCE GIP STATES ---
@@ -451,6 +455,32 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
     }
   }, []);
 
+  const [consultationState, setConsultationState] = useState<DossierConsultationState & { scope: string }>({ ...initialDossierConsultation, scope: dossierContextKey });
+  const consultation = consultationState.scope === dossierContextKey ? consultationState : initialDossierConsultation;
+  useEffect(() => { setConsultationState({ ...initialDossierConsultation, scope: dossierContextKey }); }, [dossierContextKey]);
+  const consultationGuard = useRef({ scope: dossierContextKey, selected: consultation.selected, members: integrantes, enabled: activeTab === 'integrantes' });
+  consultationGuard.current = { scope: dossierContextKey, selected: consultation.selected, members: integrantes, enabled: activeTab === 'integrantes' };
+  const changeConsultation = (action: Parameters<typeof dossierConsultationTransition>[1]) =>
+    setConsultationState({ ...dossierConsultationTransition(consultation, action), scope: dossierContextKey });
+  const consultedIndex = consultation.selected ? integrantes.indexOf(consultation.selected) : -1;
+  const consultedView = consultedIndex >= 0 ? buildMemberDossierView(integrantes[consultedIndex], dossierTarget?.nombre || nombre, dossierPhotos[consultedIndex]) : null;
+  const exportConsultedMember = async () => {
+    if (!consultedView || !dossierTarget || !user) throw new Error('DOSSIER_SCOPE_REQUIRED');
+    const member = integrantes[consultedIndex];
+    const expected = consultationGuard.current;
+    const isCurrent = () => consultationGuard.current === expected && expected.enabled;
+    const response = await fetch(`/api/pandillas/primary-photos?${new URLSearchParams({ projectId: dossierTarget.projectId!, gangId: selectedGangId })}`, { credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(20000) });
+    if (!response.ok) throw new Error('DOSSIER_READ_REQUIRED');
+    const data = await response.json();
+    const fingerprint = await legacyMemberFingerprint(member);
+    if (!Array.isArray(data.items) || data.items.filter((row: any) => row.memberFingerprint === fingerprint).length !== 1) throw new Error('DOSSIER_STALE_MEMBER');
+    const fresh = buildMemberDossierView(member, consultedView.gangName, bindDossierPhotos(dossierTarget.projectId!, selectedGangId, [fingerprint], data)[0]);
+    const identity = (view: typeof fresh) => view.photos.map(photo => photo.evidence ? `${photo.evidence.assetId}:${photo.evidence.derivedSha256}:${photo.evidence.associationVersion}:${photo.evidence.documentVersion}:${photo.evidence.selectionVersion || ''}` : photo.url);
+    if (JSON.stringify(identity(fresh)) !== JSON.stringify(identity(consultedView))) throw new Error('DOSSIER_PHOTOS_CHANGED');
+    const { exportMemberDossierToWord } = await import('@/lib/exportToWord');
+    if (!isCurrent()) throw new Error('DOSSIER_CONTEXT_CHANGED');
+    await exportMemberDossierToWord(fresh, { projectId: dossierTarget.projectId!, gangId: selectedGangId, actor: username }, isCurrent);
+  };
   const [editingMemberIndex, setEditingMemberIndex] = useState<number | null>(null);
   const [tempMember, setTempMember] = useState<Partial<GangMember>>({
     nombre: "", alias: "", edad: "", curp: "", domicilioConocido: "",
@@ -1385,6 +1415,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
     });
     setTempGeoLat("");
     setTempGeoLng("");
+    changeConsultation("CLOSE");
   };
 
   const handleEditMember = (index: number) => {
@@ -1408,6 +1439,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
     setTempGeoLat(existingLat !== null ? String(existingLat) : "");
     setTempGeoLng(existingLng !== null ? String(existingLng) : "");
 
+    changeConsultation("REGISTER");
     setActiveTab("integrantes");
   };
 
@@ -2263,8 +2295,8 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
         {/* TAB 3: MEMBER DOSSIER */}
         {activeTab === "integrantes" && (
           <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <div className="lg:col-span-12 bg-slate-900/30 border border-slate-800 rounded-2xl p-4 space-y-2">
-              <h3 className="text-sm font-bold text-slate-200">IMPORTAR DOSSIER INSTITUCIONAL</h3>
+            <details className="lg:col-span-12 bg-slate-900/30 border border-slate-800 rounded-2xl p-4 space-y-2">
+              <summary className="text-sm font-bold text-slate-200 cursor-pointer">IMPORTAR DOSSIER INSTITUCIONAL</summary>
               <label className="block text-sm text-slate-300">Seleccionar archivo JSON (máximo 900 KB)
                 <input ref={dossierFileInput} type="file" accept=".json,application/json" disabled={dossierBusy}
                   onChange={event => { void selectDossierFile(event.target.files?.[0]); }} className="block mt-2" />
@@ -2310,9 +2342,11 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
                   </table></div>
                 </div>
               )}
-            </div>
-            {/* MEMBER CAPTURE COLUMN (6 cols) */}
+            </details>
+            {/* Consultation and existing form opened on demand. */}
             <div className="lg:col-span-6 bg-slate-900/30 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+              <MemberDossierPanel formOpen={consultation.formOpen} view={consultedView} onWord={exportConsultedMember} onClear={() => changeConsultation('CLEAR')}
+                onRegister={() => { setEditingMemberIndex(null); setTempMember({}); setTempGeoLat(''); setTempGeoLng(''); changeConsultation('REGISTER'); }}>
               <div className="border-b border-slate-800 pb-2">
                 <h3 className="text-sm font-black text-slate-200 uppercase tracking-wide">
                   {editingMemberIndex !== null ? "✏️ Editar Integrante del Dossier" : "➕ Registrar Nuevo Integrante en Dossier"}
@@ -2592,14 +2626,12 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
                 </div>
 
                 <div className="flex gap-2">
-                  {editingMemberIndex !== null && (
-                    <button
-                      onClick={() => setEditingMemberIndex(null)}
+                  <button
+                      onClick={() => { setEditingMemberIndex(null); changeConsultation("CLOSE"); }}
                       className="flex-1 py-2 rounded-lg border border-slate-800 text-xs font-bold text-slate-400 hover:bg-slate-900"
                     >
                       Cancelar
                     </button>
-                  )}
                   <button
                     onClick={handleAddMember}
                     className="flex-2 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-xs uppercase flex-1 shadow"
@@ -2608,6 +2640,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
                   </button>
                 </div>
               </div>
+              </MemberDossierPanel>
             </div>
 
             {/* REGISTERED DOSSIER GRID (6 cols) */}
@@ -2629,7 +2662,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
                     >
                       {/* Avatar Photo */}
                       <div className="w-16 h-16 rounded-lg bg-slate-900 border border-slate-800 overflow-hidden flex items-center justify-center flex-shrink-0 relative">
-                        <DossierPrimaryPhoto primaryUrl={dossierPrimaryUrls[idx]} legacyUrl={m.fotografiaUrl} sex={m.sexo} alt={m.alias || m.nombre} />
+                        <DossierPrimaryPhoto primaryUrl={dossierPhotos[idx]?.primary?.derivedUrl} legacyUrl={m.fotografiaUrl} sex={m.sexo} alt={m.alias || m.nombre} />
                         {/* Peligrosidad badge overlay */}
                         <div className="absolute bottom-0 inset-x-0 text-center bg-slate-950/80 text-[8px] font-black text-sky-400">
                           {m.peligrosidadCalculada}%
@@ -2665,6 +2698,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
                       </div>
 
                       <div className="flex flex-col gap-1.5 justify-center pl-2">
+                        <button onClick={() => changeConsultation(m)} className="px-2 py-1.5 rounded text-sky-300 text-xs font-bold" aria-pressed={consultation.selected === m}>CONSULTAR</button>
                         <button
                           onClick={() => handleEditMember(idx)}
                           className="p-1.5 hover:bg-slate-900 rounded text-slate-400 hover:text-sky-400 text-xs transition-colors"

@@ -1004,6 +1004,18 @@ function denueContextualAnnexSummary(generationContext: any) {
   };
 }
 
+/** Read-only member consultation export. Reuses the Document Engine without report publication side effects. */
+export async function exportMemberDossierToWord(view: import('@/modules/pandillas/memberDossierView').MemberDossierView,
+  context: import('@/document-engine/renderers/MemberDossierWordRenderer').DossierWordContext, isCurrent: () => boolean) {
+  if (!context.projectId || !context.gangId || !context.actor || !isCurrent()) throw new Error('DOSSIER_SCOPE_REQUIRED');
+  const { hydrateDossierWordImages, renderMemberDossierWord } = await import('@/document-engine/renderers/MemberDossierWordRenderer');
+  const images = await hydrateDossierWordImages(view);
+  const document = renderMemberDossierWord(view, images, context);
+  const blob = await Packer.toBlob(document);
+  if (!isCurrent()) throw new Error('DOSSIER_CONTEXT_CHANGED');
+  saveAs(blob, `Ficha_integrante_${sanitizeExpedienteFilePart(view.name)}.docx`);
+}
+
 export async function exportToWord(
   payload: any,
   projectName: string,

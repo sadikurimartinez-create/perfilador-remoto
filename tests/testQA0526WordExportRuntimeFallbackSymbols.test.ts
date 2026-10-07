@@ -1,3 +1,4 @@
+jest.mock('server-only', () => ({}), { virtual: true });
 import fs from "node:fs";
 import path from "node:path";
 import { TCE_DEFAULT_FALLBACK } from "../src/utils/territorialContextEngine";

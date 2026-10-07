@@ -21,7 +21,7 @@ const sha = (text: string) => createHash('sha256').update(text).digest('hex');
 let records: Map<string, any>, members: any[], tx: any, db: any;
 const forbidden = jest.fn(() => { throw new Error('WRITE_FORBIDDEN'); });
 const sign = jest.fn(), metadata = jest.fn();
-function ref(path: string): any { return { path, doc: (id: string) => ref(`${path}/${id}`), collection: (name: string) => ref(`${path}/${name}`), where: jest.fn(() => ref(path)), limit: (n: number) => { expect(n).toBe(201); return ref(path); } }; }
+function ref(path: string): any { return { path, doc: (id: string) => ref(`${path}/${id}`), collection: (name: string) => ref(`${path}/${name}`), where: jest.fn(() => ref(path)), limit: (n: number) => { expect(n).toBe(path.endsWith('pandillasPhotoAssociations') ? 1001 : 201); return ref(path); } }; }
 const root = (kind: string, id: string) => `projects/${pid}/${kind}/${id}`;
 beforeEach(async () => {
   jest.clearAllMocks(); records = new Map();
@@ -61,7 +61,7 @@ const resolve = () => resolveGangPrimaryPhotoUrls('synthetic-session', { project
 test('LOGAN 32: 4/4 reviewed identities resolve PRIMARY assets in one read-only batch', async () => {
   const result = await resolve(); expect(result.items).toHaveLength(4);
   expect(result.items.every(item => item.hasPrimaryPhoto && item.derivedUrl && item.assetId)).toBe(true);
-  expect(db.runTransaction).toHaveBeenCalledTimes(1); expect(tx.get).toHaveBeenCalledTimes(3); expect(tx.getAll).toHaveBeenCalledTimes(3);
+  expect(db.runTransaction).toHaveBeenCalledTimes(1); expect(tx.get).toHaveBeenCalledTimes(4); expect(tx.getAll).toHaveBeenCalledTimes(3);
   expect(sign).toHaveBeenCalledTimes(4);
   expect(JSON.stringify(result)).not.toMatch(/storagePath|PRIVATE_NOT_RETURNED|legacy-unchanged|originalSha256|reviewedBy/);
   expect(authorizeInstitutionalProjectAccess).toHaveBeenCalledWith({ sessionToken: 'synthetic-session', projectId: pid, action: 'READ' });
@@ -144,4 +144,25 @@ test('PRIMARY precedes existing legacy fallback; image errors return stable fall
   const ui = readFileSync('src/modules/pandillas/components/DossierPrimaryPhoto.tsx', 'utf8');
   expect(ui).not.toMatch(/fotografiaUrl\s*=|setIntegrantes|saveGang|getDb|firebase\/storage|firebase\/firestore/);
   expect(ui).toContain('onError'); expect(ui).toContain('state.members === members');
+});
+
+test('R5: additional EXACT reviewed images remain within their identity and do not duplicate PRIMARY', async () => {
+  const association = records.get(root('pandillasPhotoAssociations', 'association-3'));
+  association.memberIdentityId = 'identity-0'; association.imageType = 'MEMBER_EVIDENCE_ATTACHMENT';
+  const result = await resolve();
+  expect(result.items[0].additionalPhotos).toHaveLength(1);
+  expect(result.items[0].additionalPhotos[0].assetId).toBe('asset-3');
+  expect(result.items[1].additionalPhotos).toEqual([]);
+  expect(result.items[0].additionalPhotos.some(photo => photo.assetId === result.items[0].assetId)).toBe(false);
+});
+test.each(['RETIRED', 'AMBIGUOUS', 'GANG_ALBUM', 'unapproved', 'cross-project', 'mismatched-document'])('R5 additional %s never leaks', async mode => {
+  const association = records.get(root('pandillasPhotoAssociations', 'association-3'));
+  association.memberIdentityId = 'identity-0'; association.imageType = 'MEMBER_EVIDENCE_ATTACHMENT';
+  if (mode === 'RETIRED') association.status = mode;
+  if (mode === 'AMBIGUOUS') association.associationLevel = mode;
+  if (mode === 'GANG_ALBUM') association.imageType = mode;
+  if (mode === 'cross-project') association.projectId = 'OTHER';
+  if (mode === 'unapproved') records.get(root('documents', 'asset-3')).multimodalEvidence.humanValidationStatus = 'PENDING_REVIEW';
+  if (mode === 'mismatched-document') records.get(root('documents', 'asset-3')).id = 'OTHER';
+  expect((await resolve()).items[0].additionalPhotos).toEqual([]);
 });
