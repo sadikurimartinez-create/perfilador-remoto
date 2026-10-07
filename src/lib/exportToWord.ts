@@ -1007,13 +1007,21 @@ function denueContextualAnnexSummary(generationContext: any) {
 /** Read-only member consultation export. Reuses the Document Engine without report publication side effects. */
 export async function exportMemberDossierToWord(view: import('@/modules/pandillas/memberDossierView').MemberDossierView,
   context: import('@/document-engine/renderers/MemberDossierWordRenderer').DossierWordContext, isCurrent: () => boolean) {
-  if (!context.projectId || !context.gangId || !context.actor || !isCurrent()) throw new Error('DOSSIER_SCOPE_REQUIRED');
-  const { hydrateDossierWordImages, renderMemberDossierWord } = await import('@/document-engine/renderers/MemberDossierWordRenderer');
-  const images = await hydrateDossierWordImages(view);
-  const document = renderMemberDossierWord(view, images, context);
-  const blob = await Packer.toBlob(document);
-  if (!isCurrent()) throw new Error('DOSSIER_CONTEXT_CHANGED');
-  saveAs(blob, `Ficha_integrante_${sanitizeExpedienteFilePart(view.name)}.docx`);
+  const { DossierWordError } = await import('@/modules/pandillas/memberDossierView');
+  if (!context.projectId || !context.gangId || !context.actor || !isCurrent()) throw new DossierWordError('CONTEXT_CHANGED', 'BUILD');
+  let blob: Blob;
+  try {
+    const { hydrateDossierWordImages, renderMemberDossierWord } = await import('@/document-engine/renderers/MemberDossierWordRenderer');
+    const images = await hydrateDossierWordImages(view);
+    const document = renderMemberDossierWord(view, images, context);
+    blob = await Packer.toBlob(document);
+  } catch (error) {
+    if (error instanceof DossierWordError) throw error;
+    throw new DossierWordError('BUILD_FAILED', 'BUILD');
+  }
+  if (!isCurrent()) throw new DossierWordError('CONTEXT_CHANGED', 'BUILD');
+  try { saveAs(blob, `Ficha_integrante_${sanitizeExpedienteFilePart(view.name)}.docx`); }
+  catch { throw new DossierWordError('DOWNLOAD_FAILED', 'DOWNLOAD'); }
 }
 
 export async function exportToWord(

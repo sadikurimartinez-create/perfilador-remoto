@@ -10,7 +10,7 @@ import type { GangMember } from '../src/modules/pandillas/pandillas.mapper';
 const source = readFileSync('src/modules/pandillas/components/MemberDossierConsultation.tsx', 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.React, module: ts.ModuleKind.CommonJS, esModuleInterop: true } }).outputText;
 const presentation: any = { exports: {} };
-new Function('require', 'module', 'exports', compiled)(require, presentation, presentation.exports);
+new Function('require', 'module', 'exports', compiled)((id: string) => id === '../memberDossierView' ? require('../src/modules/pandillas/memberDossierView') : require(id), presentation, presentation.exports);
 const Consultation = presentation.exports.MemberDossierConsultation;
 const member: GangMember = { nombre: 'Nombre documental', alias: '', rol: '', edad: 0, curp: 'N/A', telefono: '  ', antecedentes: 'No refiere detenciones durante 2020', fotografiaUrl: 'legacy-unchanged' };
 const photo = (id: string): DossierPhoto => ({ assetId: id, associationId: `association-${id}`, derivedSha256: id.repeat(64).slice(0, 64), derivedUrl: `https://storage.googleapis.com/synthetic/${id}.jpg`, documentVersion: 1, associationVersion: 1, width: 100, height: 120, mimeType: 'image/jpeg' });

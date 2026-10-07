@@ -2,13 +2,14 @@ import { Document, Paragraph, TextRun, ImageRun } from 'docx';
 import { EditorialStructureEngine } from '@/utils/editorialStructureEngine';
 import { renderStructuredTable } from '@/utils/documentTableRenderer';
 import { PageFormatManager, HeaderFooterManager, InstitutionalBrandManager } from '@/utils/documentCompositionEngine';
-import type { MemberDossierView } from '@/modules/pandillas/memberDossierView';
+import { DossierWordError, type MemberDossierView } from '@/modules/pandillas/memberDossierView';
+import { EVIDENCE_FALLBACK_CATALOG } from '@/utils/evidenceImageValidationEngine';
 
-export interface DossierWordImage { data: Uint8Array; type: 'jpg' | 'png'; width: number; height: number }
+export interface DossierWordImage { data: Uint8Array; type: 'jpg' | 'png'; width: number; height: number; unavailable?: true }
 export interface DossierWordContext { projectId: string; gangId: string; actor: string }
 /** Consultation artifact, not an analytical report or a certification/publication package. */
 export function renderMemberDossierWord(view: MemberDossierView, images: DossierWordImage[], context?: DossierWordContext): Document {
-  if (!view.name || !view.gangName || images.length !== view.photos.length || images.some(image => !image.data.length)) throw new Error('DOSSIER_INCOMPLETE');
+  if (!view.name || !view.gangName || images.length !== view.photos.length || images.some((image, index) => !image.data.length && (!image.unavailable || view.photos[index].label !== 'Otra fotografía asociada'))) throw new Error('DOSSIER_INCOMPLETE');
   const children: Array<Paragraph | ReturnType<typeof renderStructuredTable>> = [
     ...InstitutionalBrandManager.createCoverIdentity('FICHA INSTITUCIONAL DE INTEGRANTE', {}, true),
     new Paragraph({ children: [new TextRun({ text: view.name, bold: true, size: 28 })] }),
@@ -21,6 +22,7 @@ export function renderMemberDossierWord(view: MemberDossierView, images: Dossier
   };
   const image = (index: number) => {
     const img = images[index];
+    if (img.unavailable) { children.push(new Paragraph({ text: EVIDENCE_FALLBACK_CATALOG.IMAGE_UNAVAILABLE })); return; }
     const scale = Math.min(320 / img.width, 260 / img.height, 1);
     children.push(new Paragraph({ children: [new ImageRun({ data: img.data, type: img.type, transformation: { width: Math.max(1, Math.round(img.width * scale)), height: Math.max(1, Math.round(img.height * scale)) } })] }));
   };
@@ -31,8 +33,8 @@ export function renderMemberDossierWord(view: MemberDossierView, images: Dossier
     children.push(renderStructuredTable({ headers: ['Campo', 'Información disponible'], rows: section.fields.map(field => [field.label, field.value]) }, { columnWidths: [32, 68], cleanMarkdown: false }));
   }
   if (view.photos.length > 1) { heading('Otras fotografías asociadas'); for (let i = 1; i < images.length; i++) image(i); }
-  const provenance = view.photos.map(photo => photo.evidence ? {
-    documentId: photo.evidence.assetId, associationId: photo.evidence.associationId, derivedSha256: photo.evidence.derivedSha256,
+  const provenance = view.photos.map((photo, index) => photo.evidence ? {
+    renderStatus: images[index].unavailable ? 'IMAGE_UNAVAILABLE' : 'INCLUDED', documentId: photo.evidence.assetId, associationId: photo.evidence.associationId, derivedSha256: photo.evidence.derivedSha256,
     documentVersion: photo.evidence.documentVersion, associationVersion: photo.evidence.associationVersion,
     selectionVersion: photo.evidence.selectionVersion,
   } : { source: 'HISTORICAL_LEGACY_FALLBACK' });
@@ -45,7 +47,10 @@ export function renderMemberDossierWord(view: MemberDossierView, images: Dossier
 export async function hydrateDossierWordImages(view: MemberDossierView): Promise<DossierWordImage[]> {
   const images: DossierWordImage[] = [];
   for (const photo of view.photos) {
+    let photoStatus: number | undefined;
+    try {
     const response = await fetch(photo.url, { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(20000) });
+    photoStatus = response.status;
     if (!response.ok) throw new Error('DOSSIER_IMAGE_UNAVAILABLE');
     const mime = (response.headers.get('content-type') || '').split(';')[0];
     if (!['image/png', 'image/jpeg'].includes(mime)) throw new Error('DOSSIER_IMAGE_TYPE');
@@ -59,6 +64,14 @@ export async function hydrateDossierWordImages(view: MemberDossierView): Promise
     const width = bitmap.width, height = bitmap.height; bitmap.close();
     if (!width || !height || width * height > 40000000 || photo.evidence && (width !== photo.evidence.width || height !== photo.evidence.height)) throw new Error('DOSSIER_IMAGE_DIMENSIONS');
     images.push({ data, type: mime === 'image/png' ? 'png' : 'jpg', width, height });
+    } catch (error) {
+      const reason = error instanceof Error && ['DOSSIER_IMAGE_UNAVAILABLE', 'DOSSIER_IMAGE_TYPE', 'DOSSIER_IMAGE_SIZE', 'DOSSIER_IMAGE_HASH', 'DOSSIER_IMAGE_DIMENSIONS'].includes(error.message)
+        ? error.message : 'IMAGE_FETCH_OR_DECODE_FAILED';
+      console.warn('[DOSSIER_WORD]', { code: photo.label === 'Otra fotografía asociada' ? 'ADDITIONAL_IMAGE_UNAVAILABLE' : 'PRIMARY_IMAGE_UNAVAILABLE', stage: 'PHOTO', reason, ...(photoStatus ? { httpStatus: photoStatus } : {}) });
+      if (photo.label !== 'Otra fotografía asociada') throw new DossierWordError('PRIMARY_UNAVAILABLE', 'PHOTO', photoStatus);
+      // Preserve the association and its provenance; never omit an unavailable additional silently.
+      images.push({ data: new Uint8Array(0), type: 'jpg', width: 1, height: 1, unavailable: true });
+    }
   }
   return images;
 }

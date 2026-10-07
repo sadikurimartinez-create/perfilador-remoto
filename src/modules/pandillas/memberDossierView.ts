@@ -1,5 +1,58 @@
-import type { GangMember } from './pandillas.mapper';
+import type { GangMember, GangEntity } from './pandillas.mapper';
 import type { DossierPhotos, DossierPhoto } from './photo-evidence/dossierPhotoDisplay';
+import { bindDossierPhotos } from './photo-evidence/dossierPhotoDisplay';
+import { legacyMemberFingerprint } from './photo-evidence/identity';
+
+export interface DossierExportGuard { scope: string; selected: GangMember | null; members: GangMember[]; enabled: boolean }
+export function isDossierExportCurrent(current: DossierExportGuard, expected: DossierExportGuard): boolean {
+  return current.enabled && expected.enabled && current.scope === expected.scope
+    && current.selected === expected.selected && current.members === expected.members;
+}
+/** Resolve only the consultation scope from the institutional inventory; server READ remains mandatory. */
+export function resolveDossierWordTarget(gangs: GangEntity[], gangId: string, projectContext?: string): GangEntity | null {
+  if (!gangId || gangId.startsWith('static-gang-')) return null;
+  const matches = gangs.filter(gang => gang.id === gangId);
+  if (matches.length !== 1 || !matches[0].projectId || projectContext && matches[0].projectId !== projectContext) return null;
+  return matches[0];
+}
+export class DossierWordError extends Error {
+  constructor(public readonly code: 'SESSION_EXPIRED' | 'ACCESS_DENIED' | 'READ_UNAVAILABLE' | 'CONTEXT_CHANGED' | 'PRIMARY_UNAVAILABLE' | 'BUILD_FAILED' | 'DOWNLOAD_FAILED',
+    public readonly stage: 'AUTHORIZATION' | 'PHOTO' | 'BUILD' | 'DOWNLOAD', public readonly httpStatus?: number) {
+    super(code); this.name = 'DossierWordError';
+  }
+}
+export function dossierWordErrorMessage(error: unknown): string {
+  const messages: Record<DossierWordError['code'], string> = {
+    SESSION_EXPIRED: 'Sesión expirada. Inicie sesión nuevamente para generar Word.',
+    ACCESS_DENIED: 'No tiene autorización para consultar este expediente.',
+    READ_UNAVAILABLE: 'No se pudo verificar la ficha institucional. Intente nuevamente.',
+    CONTEXT_CHANGED: 'La ficha cambió durante la generación. Vuelva a seleccionar el integrante.',
+    PRIMARY_UNAVAILABLE: 'No fue posible recuperar la fotografía principal. Intente nuevamente.',
+    BUILD_FAILED: 'Error al construir el documento Word.', DOWNLOAD_FAILED: 'Error al descargar el archivo Word.',
+  };
+  const controlled = error instanceof DossierWordError ? error : new DossierWordError('BUILD_FAILED', 'BUILD');
+  console.warn('[DOSSIER_WORD]', { code: controlled.code, stage: controlled.stage, ...(controlled.httpStatus ? { httpStatus: controlled.httpStatus } : {}) });
+  return messages[controlled.code];
+}
+export async function prepareAuthorizedDossierWordView(view: MemberDossierView, member: GangMember, projectId: string, gangId: string): Promise<MemberDossierView> {
+  let response: Response;
+  try {
+    response = await fetch(`/api/pandillas/primary-photos?${new URLSearchParams({ projectId, gangId })}`, { credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(20000) });
+  } catch { throw new DossierWordError('READ_UNAVAILABLE', 'AUTHORIZATION'); }
+  if (!response.ok) throw new DossierWordError(response.status === 401 ? 'SESSION_EXPIRED' : response.status === 403 ? 'ACCESS_DENIED' : 'READ_UNAVAILABLE', 'AUTHORIZATION', response.status);
+  let data: any;
+  try { data = await response.json(); } catch { throw new DossierWordError('READ_UNAVAILABLE', 'AUTHORIZATION'); }
+  const fingerprint = await legacyMemberFingerprint(member);
+  if (data.projectId !== projectId || data.gangId !== gangId || !Number.isFinite(data.expiresAt) || data.expiresAt <= Date.now()
+    || !Array.isArray(data.items) || data.items.filter((row: any) => row.memberFingerprint === fingerprint).length !== 1) throw new DossierWordError('CONTEXT_CHANGED', 'AUTHORIZATION');
+  const fresh = buildMemberDossierView(member, view.gangName, bindDossierPhotos(projectId, gangId, [fingerprint], data)[0]);
+  const identity = (snapshot: MemberDossierView) => snapshot.photos.map(photo => photo.evidence
+    ? `${photo.evidence.assetId}:${photo.evidence.derivedSha256}:${photo.evidence.associationVersion}:${photo.evidence.documentVersion}:${photo.evidence.selectionVersion || ''}` : photo.url);
+  // A standalone consultation may not have initiated the preview photo resolver. Obtain R4 photos
+  // from the authorized server response without changing preview state, legacy fields or import scope.
+  if (view.photos.some(photo => photo.evidence) && JSON.stringify(identity(fresh)) !== JSON.stringify(identity(view))) throw new DossierWordError(view.photos.some(photo => photo.evidence?.selectionVersion) && !fresh.photos.some(photo => photo.evidence?.selectionVersion) ? 'PRIMARY_UNAVAILABLE' : 'CONTEXT_CHANGED', 'PHOTO');
+  return fresh;
+}
 
 const absent = new Set(['no registrado', 'no registrada', 'no evaluado', 'no evaluada', 'sin datos', 'sin dato', 'n/a', 'n/d', 'ninguno', 'no aplica', 'desconocido', 'no refiere', 'null', 'undefined']);
 export function dossierValue(value: unknown): string | undefined {

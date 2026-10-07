@@ -40,6 +40,6 @@ test('Word hydration verifies certified SHA and dimensions without upload/persis
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ credentials: 'omit', cache: 'no-store' });
     fetchMock.mockResolvedValue(new Response(png, { headers: { 'content-type': 'image/png' } }));
     evidence.derivedSha256 = '0'.repeat(64);
-    await expect(hydrateDossierWordImages(view)).rejects.toThrow('DOSSIER_IMAGE_HASH');
+    await expect(hydrateDossierWordImages(view)).rejects.toThrow('PRIMARY_UNAVAILABLE');
   } finally { fetchMock.mockRestore(); delete (globalThis as any).createImageBitmap; }
 });

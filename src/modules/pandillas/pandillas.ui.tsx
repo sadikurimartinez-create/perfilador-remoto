@@ -16,9 +16,7 @@ import {
 import { PandillasService } from "./pandillas.service";
 import { DossierPrimaryPhoto, useDossierPhotos } from './components/DossierPrimaryPhoto';
 import { MemberDossierPanel } from './components/MemberDossierConsultation';
-import { buildMemberDossierView, initialDossierConsultation, dossierConsultationTransition, type DossierConsultationState } from './memberDossierView';
-import { bindDossierPhotos } from './photo-evidence/dossierPhotoDisplay';
-import { legacyMemberFingerprint } from './photo-evidence/identity';
+import { buildMemberDossierView, initialDossierConsultation, dossierConsultationTransition, isDossierExportCurrent, resolveDossierWordTarget, prepareAuthorizedDossierWordView, DossierWordError, type DossierConsultationState } from './memberDossierView';
 import { parseAndValidateDossierImportPayload, reviewDossierImport, canApplyDossierImport,
   buildDossierImportResult, verifyDossierImportWrite, type DossierImportPayload, type DossierImportReview, parseAndValidateR3Payload, reviewR3Update, canApplyR3Update, buildR3UpdateResult, type R3DossierPayload, type R3Review } from "./pandillasDossierImport";
 import { PandillasEngine } from "./pandillas.engine";
@@ -465,21 +463,16 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
   const consultedIndex = consultation.selected ? integrantes.indexOf(consultation.selected) : -1;
   const consultedView = consultedIndex >= 0 ? buildMemberDossierView(integrantes[consultedIndex], dossierTarget?.nombre || nombre, dossierPhotos[consultedIndex]) : null;
   const exportConsultedMember = async () => {
-    if (!consultedView || !dossierTarget || !user) throw new Error('DOSSIER_SCOPE_REQUIRED');
+    if (!user) throw new DossierWordError('SESSION_EXPIRED', 'AUTHORIZATION');
+    const wordTarget = resolveDossierWordTarget(storedGangs, selectedGangId, projectId || activeProject?.id);
+    if (!consultedView || !wordTarget) throw new DossierWordError('CONTEXT_CHANGED', 'AUTHORIZATION');
     const member = integrantes[consultedIndex];
     const expected = consultationGuard.current;
-    const isCurrent = () => consultationGuard.current === expected && expected.enabled;
-    const response = await fetch(`/api/pandillas/primary-photos?${new URLSearchParams({ projectId: dossierTarget.projectId!, gangId: selectedGangId })}`, { credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(20000) });
-    if (!response.ok) throw new Error('DOSSIER_READ_REQUIRED');
-    const data = await response.json();
-    const fingerprint = await legacyMemberFingerprint(member);
-    if (!Array.isArray(data.items) || data.items.filter((row: any) => row.memberFingerprint === fingerprint).length !== 1) throw new Error('DOSSIER_STALE_MEMBER');
-    const fresh = buildMemberDossierView(member, consultedView.gangName, bindDossierPhotos(dossierTarget.projectId!, selectedGangId, [fingerprint], data)[0]);
-    const identity = (view: typeof fresh) => view.photos.map(photo => photo.evidence ? `${photo.evidence.assetId}:${photo.evidence.derivedSha256}:${photo.evidence.associationVersion}:${photo.evidence.documentVersion}:${photo.evidence.selectionVersion || ''}` : photo.url);
-    if (JSON.stringify(identity(fresh)) !== JSON.stringify(identity(consultedView))) throw new Error('DOSSIER_PHOTOS_CHANGED');
+    const isCurrent = () => isDossierExportCurrent(consultationGuard.current, expected);
+    const fresh = await prepareAuthorizedDossierWordView(consultedView, member, wordTarget.projectId!, selectedGangId);
     const { exportMemberDossierToWord } = await import('@/lib/exportToWord');
-    if (!isCurrent()) throw new Error('DOSSIER_CONTEXT_CHANGED');
-    await exportMemberDossierToWord(fresh, { projectId: dossierTarget.projectId!, gangId: selectedGangId, actor: username }, isCurrent);
+    if (!isCurrent()) throw new DossierWordError('CONTEXT_CHANGED', 'BUILD');
+    await exportMemberDossierToWord(fresh, { projectId: wordTarget.projectId!, gangId: selectedGangId, actor: username }, isCurrent);
   };
   const [editingMemberIndex, setEditingMemberIndex] = useState<number | null>(null);
   const [tempMember, setTempMember] = useState<Partial<GangMember>>({
