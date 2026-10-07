@@ -16,6 +16,21 @@ const member: GangMember = { nombre: 'Nombre documental', alias: '', rol: '', ed
 const photo = (id: string): DossierPhoto => ({ assetId: id, associationId: `association-${id}`, derivedSha256: id.repeat(64).slice(0, 64), derivedUrl: `https://storage.googleapis.com/synthetic/${id}.jpg`, documentVersion: 1, associationVersion: 1, width: 100, height: 120, mimeType: 'image/jpeg' });
 const markup = (view: ReturnType<typeof buildMemberDossierView> | null) => renderToStaticMarkup(React.createElement(Consultation, { view, onWord: async () => {}, onClear: () => {} }));
 
+test('one Word click calls the export handler once; render does not export', async () => {
+  const isolated: any = { exports: {} };
+  const adapter = { ...React, useState: (initial: unknown) => [initial, jest.fn()] };
+  new Function('require', 'module', 'exports', compiled)((id: string) => id === 'react' ? adapter : id === '../memberDossierView' ? require('../src/modules/pandillas/memberDossierView') : require(id), isolated, isolated.exports);
+  const onWord = jest.fn(async () => {});
+  const tree = isolated.exports.MemberDossierConsultation({ view: buildMemberDossierView(member, 'Pandilla'), onWord, onClear: jest.fn() });
+  const elements: any[] = [];
+  const visit = (node: any) => { if (!node || typeof node !== 'object') return; if (Array.isArray(node)) return node.forEach(visit); elements.push(node); visit(node.props?.children); };
+  visit(tree);
+  expect(onWord).not.toHaveBeenCalled();
+  const button = elements.find(node => node.type === 'button' && node.props.children === 'GENERAR WORD');
+  await button.props.onClick();
+  expect(onWord).toHaveBeenCalledTimes(1);
+});
+
 test('A/B/C: default consultation, explicit registration and cancel preserve selection without mutations', () => {
   expect(initialDossierConsultation).toEqual({ formOpen: false, selected: null });
   const selected = dossierConsultationTransition(initialDossierConsultation, member);

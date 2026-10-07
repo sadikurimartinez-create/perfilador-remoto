@@ -1012,6 +1012,7 @@ export async function exportMemberDossierToWord(view: import('@/modules/pandilla
     additionalPhotoCount: view.photos.filter(photo => photo.label === 'Otra fotografía asociada').length, hasActiveProject: !!context.hasActiveProject, projectDependencyDetected: false };
   let stage: import('@/modules/pandillas/memberDossierView').DossierWordStage = 'DOSSIER_WORD_STAGE_1_VIEWMODEL';
   diagnostics.directPandillasEntry = typeof window !== 'undefined' && window.location.pathname === '/pandillas';
+  diagnostics.operation = 'EXPORT_CONTEXT_GUARD';
   const observe = (next: typeof stage, status: 'START' | 'PASS', image?: { bytes: number; mime: string }) => {
     stage = next;
     if (next === 'DOSSIER_WORD_STAGE_2_PRIMARY_PHOTO' && image) { diagnostics.primaryMime = image.mime; diagnostics.primaryBytes = image.bytes; }
@@ -1027,16 +1028,21 @@ export async function exportMemberDossierToWord(view: import('@/modules/pandilla
   let blob: Blob;
   try {
     observe(stage, 'PASS');
+    diagnostics.operation = 'IMPORT_WORD_RENDERER';
     const { hydrateDossierWordImages, renderMemberDossierWord } = await import('@/document-engine/renderers/MemberDossierWordRenderer');
     if (!diagnostics.hasPrimaryPhoto) {
       observe('DOSSIER_WORD_STAGE_2_PRIMARY_PHOTO', 'START');
       throw new DossierWordError('PRIMARY_UNAVAILABLE', 'PHOTO');
     }
+    diagnostics.operation = 'HYDRATE_WORD_IMAGES';
     const images = await hydrateDossierWordImages(view, observe);
+    diagnostics.operation = 'RENDER_WORD_DOCUMENT';
     const document = renderMemberDossierWord(view, images, context, observe);
+    diagnostics.operation = 'PACK_WORD_DOCUMENT';
     observe('DOSSIER_WORD_STAGE_6_PACKER', 'START');
     blob = await Packer.toBlob(document);
     observe('DOSSIER_WORD_STAGE_6_PACKER', 'PASS');
+    diagnostics.operation = 'VALIDATE_WORD_BLOB';
     observe('DOSSIER_WORD_STAGE_7_BLOB', 'START');
     if (!(blob instanceof Blob) || !blob.size) throw new Error('DOSSIER_BLOB_INVALID');
     observe('DOSSIER_WORD_STAGE_7_BLOB', 'PASS');
@@ -1050,6 +1056,7 @@ export async function exportMemberDossierToWord(view: import('@/modules/pandilla
     logDossierWordStage(stage, 'FAIL', diagnostics, error); throw error;
   }
   try {
+    diagnostics.operation = 'DOWNLOAD_WORD_DOCUMENT';
     observe('DOSSIER_WORD_STAGE_8_DOWNLOAD', 'START');
     saveAs(blob, `Ficha_integrante_${sanitizeExpedienteFilePart(view.name)}.docx`);
     observe('DOSSIER_WORD_STAGE_8_DOWNLOAD', 'PASS');

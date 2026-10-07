@@ -47,7 +47,7 @@ test('nested causes and diagnostic identifiers cannot disclose signed URLs, cook
       primaryMime: 'Cookie=PRIVATE_COOKIE', directPandillasEntry: true,
     }, error);
     const event = JSON.parse(log.mock.calls[0][1]);
-    expect(event.errorCause).toEqual({ errorName: 'Error', errorMessage: 'UNCLASSIFIED_RUNTIME_FAILURE' });
+    expect(event.errorCause).toEqual({ errorName: 'Error', errorMessage: 'RUNTIME_ERROR_DETAILS_REDACTED' });
     expect(JSON.stringify(log.mock.calls)).not.toMatch(/PRIVATE_TOKEN|PRIVATE_COOKIE|https:|\/private\/storage/);
     (error as Error & { cause?: unknown }).cause = new ReferenceError('Buffer is not defined');
     logDossierWordStage('DOSSIER_WORD_STAGE_6_PACKER', 'FAIL', { hasPrimaryPhoto: true, additionalPhotoCount: 0, hasActiveProject: false, projectDependencyDetected: false }, error);
@@ -65,6 +65,28 @@ test('runtime failure identifies the first failed stage without logging private 
     expect(JSON.stringify(log.mock.calls)).not.toMatch(/SECRET|Cookie|https:|signature/);
     logDossierWordStage('DOSSIER_WORD_STAGE_4_RENDERER', 'FAIL', { hasPrimaryPhoto: true, additionalPhotoCount: 0, hasActiveProject: false, projectDependencyDetected: false }, new TypeError("Cannot read properties of undefined (reading 'map')"));
     expect(JSON.parse(log.mock.calls.at(-1)![1]).errorMessage).toContain("reading 'map'");
+  } finally { log.mockRestore(); }
+});
+test('Vercel-shaped export reaches primary after context PASS with active project irrelevant', async () => {
+  const log = jest.spyOn(console, 'info').mockImplementation(() => {});
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  Object.defineProperty(globalThis, 'window', { value: { location: { pathname: '/pandillas' } }, configurable: true });
+  try {
+    await exportMemberDossierToWord(view(), { ...context, hasActiveProject: true }, () => true);
+    const events = log.mock.calls.map(([, data]) => JSON.parse(data));
+    const pass = events.findIndex(event => event.stage === 'DOSSIER_WORD_STAGE_1_VIEWMODEL' && event.status === 'PASS');
+    expect(events[pass + 1]).toMatchObject({ stage: 'DOSSIER_WORD_STAGE_2_PRIMARY_PHOTO', status: 'START', operation: 'HYDRATE_WORD_IMAGES', hasActiveProject: true, directPandillasEntry: true, projectDependencyDetected: false, additionalPhotoCount: 0 });
+    expect(saveAs).toHaveBeenCalledTimes(1);
+  } finally { log.mockRestore(); if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow); else delete (globalThis as any).window; }
+});
+test('chunk failure preserves error classification without exposing its signed request URL', () => {
+  const log = jest.spyOn(console, 'info').mockImplementation(() => {});
+  try {
+    const error = new Error('Loading chunk 123 failed. (error: https://private.example/file?token=SECRET)');
+    error.name = 'ChunkLoadError';
+    logDossierWordStage('DOSSIER_WORD_STAGE_1_VIEWMODEL', 'FAIL', { hasPrimaryPhoto: true, additionalPhotoCount: 0, hasActiveProject: true, projectDependencyDetected: false, operation: 'IMPORT_WORD_RENDERER' }, error);
+    expect(JSON.parse(log.mock.calls[0][1])).toMatchObject({ errorName: 'ChunkLoadError', errorMessage: 'DYNAMIC_MODULE_LOAD_FAILED', operation: 'IMPORT_WORD_RENDERER' });
+    expect(JSON.stringify(log.mock.calls)).not.toMatch(/SECRET|https:/);
   } finally { log.mockRestore(); }
 });
 test('absent PRIMARY is an explicit error before packaging or download', async () => {

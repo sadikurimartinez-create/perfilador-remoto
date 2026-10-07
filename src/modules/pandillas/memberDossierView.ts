@@ -27,22 +27,31 @@ export interface DossierWordDiagnostics {
   hasActiveProject: boolean; projectDependencyDetected: boolean;
   directPandillasEntry?: boolean; primaryMime?: string; primaryBytes?: number;
   docxBuildStarted?: boolean; docxBuildCompleted?: boolean;
+  operation?: 'AUTHORIZED_VIEW_READ' | 'EXPORT_CONTEXT_GUARD' | 'IMPORT_WORD_RENDERER' | 'HYDRATE_WORD_IMAGES' | 'RENDER_WORD_DOCUMENT' | 'PACK_WORD_DOCUMENT' | 'VALIDATE_WORD_BLOB' | 'DOWNLOAD_WORD_DOCUMENT';
 }
 /** Explicit allowlist: never serialize the original exception, URL, member record or project. */
 export function logDossierWordStage(stage: DossierWordStage, status: 'START' | 'PASS' | 'FAIL', diagnostics: DossierWordDiagnostics, error?: unknown,
   image?: { bytes: number; mime: string }) {
-  const names = ['Error', 'TypeError', 'ReferenceError', 'InvalidStateError', 'DossierWordError'];
+  const names = ['Error', 'TypeError', 'ReferenceError', 'InvalidStateError', 'DossierWordError', 'ChunkLoadError', 'SyntaxError'];
   const messages = ['DOSSIER_INCOMPLETE', 'DOSSIER_EMPTY_SECTION', 'DOSSIER_IMAGE_UNAVAILABLE', 'DOSSIER_IMAGE_TYPE', 'DOSSIER_IMAGE_SIZE', 'DOSSIER_IMAGE_HASH', 'DOSSIER_IMAGE_DIMENSIONS', 'DOSSIER_BLOB_INVALID'];
   const errorName = error instanceof Error && names.includes(error.name) ? error.name : error ? 'Error' : undefined;
   const runtimePattern = /^(?:[A-Za-z_$][\w$]{0,60} is not defined|Cannot access '[A-Za-z_$][\w$]{0,60}' before initialization|Cannot read properties of (?:undefined|null) \(reading '[A-Za-z_$][\w$]{0,60}'\)|[A-Za-z_$][\w$.]{0,60} is not a function)$/;
-  const errorMessage = error instanceof DossierWordError ? error.code : error instanceof Error && (messages.includes(error.message) || runtimePattern.test(error.message)) ? error.message : error ? 'UNCLASSIFIED_RUNTIME_FAILURE' : undefined;
+  const safeMessage = (value: unknown): string => {
+    if (value instanceof DossierWordError) return value.code;
+    if (value instanceof Error && (messages.includes(value.message) || runtimePattern.test(value.message))) return value.message;
+    if (value instanceof Error && /Loading (?:CSS )?chunk .+ failed|Failed to fetch dynamically imported module|Importing a module script failed/i.test(value.message)) return 'DYNAMIC_MODULE_LOAD_FAILED';
+    if (value instanceof Error && /Unexpected token/.test(value.message)) return 'MODULE_OR_DATA_SYNTAX_ERROR';
+    return 'RUNTIME_ERROR_DETAILS_REDACTED';
+  };
+  const errorMessage = error ? safeMessage(error) : undefined;
   const cause = error instanceof Error ? (error as Error & { cause?: unknown }).cause : undefined;
   const errorCause = cause === undefined ? undefined : {
     errorName: cause instanceof Error && names.includes(cause.name) ? cause.name : 'Error',
-    errorMessage: cause instanceof DossierWordError ? cause.code : cause instanceof Error && (messages.includes(cause.message) || runtimePattern.test(cause.message)) ? cause.message : 'UNCLASSIFIED_RUNTIME_FAILURE',
+    errorMessage: safeMessage(cause),
   };
   console.info('[DOSSIER_WORD]', JSON.stringify({ stage, status, errorName, errorMessage,
-    errorCause,
+    errorCause, errorConstructor: error instanceof Error && names.includes(error.constructor.name) ? error.constructor.name : error ? 'UnknownErrorType' : undefined,
+    operation: diagnostics.operation,
     memberId: diagnostics.memberId && /^[\w-]{1,128}$/.test(diagnostics.memberId) ? diagnostics.memberId : undefined, hasPrimaryPhoto: diagnostics.hasPrimaryPhoto,
     additionalPhotoCount: diagnostics.additionalPhotoCount, hasActiveProject: diagnostics.hasActiveProject,
     projectDependencyDetected: diagnostics.projectDependencyDetected,
