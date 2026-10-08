@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { PandillasGisViewport } from "./components/PandillasGisViewport";
 import { useAuth } from "@/context/AuthContext";
 import { useProject } from "@/context/ProjectContext";
 import {
@@ -3026,20 +3027,13 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
             {geointSubTab === "mapa" && (
               <>
                 {/* 1. MAPA GIS PANDILLAS (Elemento central absoluto, 100% ancho, h-[70vh]) */}
-                <div className="w-full bg-slate-950/60 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-                  <div className="border-b border-slate-900 pb-3 flex justify-between items-center">
-                    <div>
-                      <h3 className="text-sm font-black text-slate-200 uppercase tracking-wider">🗺️ Mapa Táctico GEOINT de Pandillas</h3>
-                      <p className="text-[10px] text-slate-500">Visualización de capas espaciales activas en tiempo real.</p>
-                    </div>
-                  </div>
-                  
+                <PandillasGisViewport map={mapInstance}>
                   {!isLoaded ? (
-                    <div className="w-full h-[70vh] rounded-xl border border-slate-800 bg-slate-950 flex items-center justify-center text-xs text-slate-500">
+                    <div className="w-full h-full rounded-xl border border-slate-800 bg-slate-950 flex items-center justify-center text-xs text-slate-500">
                       Cargando cartografía táctica...
                     </div>
                   ) : (
-                    <div id="gis-tactical-map" className="relative h-[70vh] w-full rounded-xl border border-slate-800 bg-slate-950 overflow-hidden shadow-2xl">
+                    <div id="gis-tactical-map" className="relative h-full w-full rounded-xl border border-slate-800 bg-slate-950 overflow-hidden shadow-2xl">
                       {/* Zoom & Base Layer Controls Overlay */}
                       <div className="absolute top-4 right-4 z-10 flex flex-col gap-2 bg-slate-950/90 border border-slate-800 p-2.5 rounded-xl shadow-2xl">
                         <div className="text-[9px] uppercase font-black tracking-wider text-slate-400 border-b border-slate-850 pb-1 mb-1">
@@ -3321,7 +3315,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
                       </GoogleMap>
                     </div>
                   )}
-                </div>
+                </PandillasGisViewport>
 
                 {/* 2. DETALLE EXPANDIDO DE INTELIGENCIA TERRITORIAL (Clic en marcador, abajo del mapa) */}
                 {selectedGisElement && (
