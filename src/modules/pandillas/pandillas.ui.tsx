@@ -15,6 +15,7 @@ import {
   calculateSimilarity
 } from "./pandillas.mapper";
 import { PandillasService } from "./pandillas.service";
+import { canWriteInstitutionalProject } from "@/lib/institutionalCollectionActions";
 import { CEIPOLButton } from "@/components/ui/CEIPOLButton";
 import { GangOrganizationPrintView, GANG_ROLE_OPTIONS, createGangOrganizationSnapshot, type GangOrganizationSnapshot } from "./components/GangOrganizationPrintView";
 import { DossierPrimaryPhoto } from './components/DossierPrimaryPhoto';
@@ -590,6 +591,8 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
   const [gisAnalysisReport, setGisAnalysisReport] = useState<string | null>(null);
   const gisContextGuard = useRef({ caseProjectId: uiScope.caseProjectId, propProjectId: projectId, activeProjectId: activeProject?.id });
   gisContextGuard.current = { caseProjectId: uiScope.caseProjectId, propProjectId: projectId, activeProjectId: activeProject?.id };
+  const sweepContextGuard = useRef({ caseProjectId: uiScope.caseProjectId, propProjectId: projectId, activeProjectId: activeProject?.id });
+  sweepContextGuard.current = { caseProjectId: uiScope.caseProjectId, propProjectId: projectId, activeProjectId: activeProject?.id };
 
   const [hoveredGisElement, setHoveredGisElement] = useState<any | null>(null);
   const [selectedGisElement, setSelectedGisElement] = useState<any | null>(null);
@@ -1607,6 +1610,14 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
   // --- GRANULAR GEOSPATIAL SWEEPS ---
   const handleExecuteTargetedSweep = async () => {
     if (!caseEnabled) { alert(PANDILLAS_CASE_MESSAGE); return; }
+    const contextId = uiScope.caseProjectId;
+    if (!contextId || !activeProject?.id || activeProject.id !== contextId || (projectId && projectId !== contextId)) {
+      alert("El barrido requiere un expediente contextual activo y coherente. Seleccione el expediente antes de continuar.");
+      return;
+    }
+    const contextStillCurrent = () => sweepContextGuard.current.caseProjectId === contextId
+      && sweepContextGuard.current.activeProjectId === contextId
+      && sweepContextGuard.current.propProjectId === projectId;
     if (!nombre) {
       alert("⚠️ Complete los datos generales de la pandilla antes de lanzar el barrido de geointeligencia.");
       return;
@@ -1616,6 +1627,10 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
     setAnalysisResult(null);
 
     try {
+      if (!(await canWriteInstitutionalProject(contextId)) || !contextStillCurrent()) {
+        alert("No se pudo autorizar el barrido en el expediente contextual actual.");
+        return;
+      }
       const steps = [
         "Iniciando Mapeador de Geointeligencia Criminal...",
         "Resolviendo demarcación territorial de Aguascalientes...",
@@ -1632,6 +1647,10 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
         await new Promise(r => setTimeout(r, 700 + Math.random() * 400));
       }
 
+      if (!contextStillCurrent() || !(await canWriteInstitutionalProject(contextId)) || !contextStillCurrent()) {
+        alert("El contexto o la autorización cambió. No se ejecutó el barrido.");
+        return;
+      }
       let filterPrompt = `BARRIDO ESPECÍFICO DIRIGIDO A: `;
       if (barridoTarget === "all") {
         filterPrompt += `Toda la Pandilla: "${nombre}"`;
@@ -1646,13 +1665,14 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
       }
 
       const canonicalPandillasInput = adaptPandillasCanonicalInput({
-        projectId: projectId || activeProject?.id || "",
+        projectId: contextId,
         canonicalGeography: activeProject?.canonicalGeography,
         inSituOrchestrationItems,
         streetViewItems: album,
       });
 
       const inputGang: GangEntity = {
+        projectId: contextId,
         nombre,
         zonaInfluencia,
         estatus,
@@ -1667,6 +1687,10 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
       };
 
       const result = await PandillasEngine.executeFullSweep(inputGang, filterPrompt);
+      if (!contextStillCurrent()) {
+        alert("El expediente cambió durante el barrido. El resultado no se incorporó al contexto actual.");
+        return;
+      }
       const sweepStatus = (result as any).sweepStatus || ((result as any).exito === false ? "VALIDATION_ERROR" : "SUCCESS");
       if (!["SUCCESS", "EMPTY"].includes(sweepStatus)) {
         throw new PandillasSweepError(sweepStatus as any, PANDILLAS_SWEEP_MESSAGES[sweepStatus as PandillasSweepStatus] || "PROVIDER_ERROR");
