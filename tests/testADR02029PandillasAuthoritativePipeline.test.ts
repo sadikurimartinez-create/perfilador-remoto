@@ -351,33 +351,13 @@ describe("ADR-020.29 Pandillas authoritative pipeline", () => {
     expect(body.sourceIntegrity.geolocationPolicy).toBe("GEO_UNAVAILABLE");
   });
 
-  test("TEST 019 - CICE telemetry does not hardcode provider availability", async () => {
+  test("TEST 019 - legacy GIS client inventories cannot assert provider availability", async () => {
+    mockCorrelate.mockClear();
     const response = await POST_GIS(new Request("http://localhost/api/pandillas/analyze-gis", {
-      method: "POST",
-      body: JSON.stringify({
-        selectedGangs: ["Clica Norte"],
-        activeLayers: ["osint", "influence"],
-        domiciles: [],
-        influenceZones: [],
-        manualDrawings: [],
-        allGangs: []
-      })
+      method: "POST", headers: { origin: "http://localhost" },
+      body: JSON.stringify({ selectedGangs: ["Clica Norte"], activeLayers: ["osint"],
+        domiciles: [], influenceZones: [], manualDrawings: [], allGangs: [] })
     }));
-    const body = await response.json();
-
-    expect(body.structuredOutput.cice_report.input).toMatchObject({
-      rssCount: 0,
-      hasGoogleMaps: false,
-      hasScince: false,
-      hasDenue: false,
-      socialMediaSignals: {
-        telegram: false,
-        facebook: false,
-        instagram: false,
-        x: false,
-        reddit: false,
-        search: false,
-      }
-    });
-  });
-});
+    expect(response.status).toBe(400);
+    expect(mockCorrelate).not.toHaveBeenCalled();
+  });});

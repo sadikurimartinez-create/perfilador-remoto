@@ -588,6 +588,8 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
   const [multiSelectedZones, setMultiSelectedZones] = useState<InfluenceZone[]>([]);
   const [isGisAnalyzing, setIsGisAnalyzing] = useState(false);
   const [gisAnalysisReport, setGisAnalysisReport] = useState<string | null>(null);
+  const gisContextGuard = useRef({ caseProjectId: uiScope.caseProjectId, propProjectId: projectId, activeProjectId: activeProject?.id });
+  gisContextGuard.current = { caseProjectId: uiScope.caseProjectId, propProjectId: projectId, activeProjectId: activeProject?.id };
 
   const [hoveredGisElement, setHoveredGisElement] = useState<any | null>(null);
   const [selectedGisElement, setSelectedGisElement] = useState<any | null>(null);
@@ -1547,26 +1549,40 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
         activeGisLayers.history && "history"
       ].filter(Boolean) as string[];
 
+      const contextId = uiScope.caseProjectId;
+      if (!contextId || (projectId && activeProject?.id && projectId !== activeProject.id)) {
+        throw new Error("El expediente del componente y el contexto activo no coinciden. Seleccione nuevamente el expediente.");
+      }
+      const selected = selectedGangsForGis.map(name => storedGangs.filter(g => g.nombre === name));
+      if (selected.some(matches => matches.length !== 1)) throw new Error("La selección de pandillas es ambigua. Actualice el catálogo.");
+      const gangs = selected.map(matches => matches[0]);
+      if (gangs.some(g => !g.id || g.id.startsWith('static-gang-'))) throw new Error("La selección requiere identificadores institucionales persistidos.");
+      const owner = gangs.find(g => g.id === selectedGangId);
+      if (geometrias.length && (!owner || JSON.stringify(geometrias) !== JSON.stringify(owner.geometrias || []))) {
+        throw new Error("Hay geometrías sin guardar o modificadas. Guarde mediante el flujo autorizado o vuelva a cargar la pandilla antes de analizar.");
+      }
       const payload = {
-        selectedGangs: selectedGangsForGis,
+        projectId: contextId,
+        selectedGangIds: gangs.map(g => g.id!),
         activeLayers,
-        domiciles: filteredGisData.nodes,
-        influenceZones: filteredGisData.zones,
-        manualDrawings: geometrias.map(geo => ({
-          geometry_type: geo.tipo === "zona_riesgo" ? "buffer" : (geo.tipo === "poligono" ? "polygon" : geo.tipo),
-          coordinates: geo.puntos,
-          radio: geo.radio,
-          risk_level: geo.riskLevel || "medium",
-          label: geo.nombre,
-          timestamp: geo.fechaActualizacion || new Date().toISOString()
-        })),
-        allGangs: storedGangs
+        geometryRefs: geometrias.map(g => ({ gangId: owner!.id!, geometryId: g.id }))
       };
+      const canonical = (v: any): string => {
+        if (Array.isArray(v)) return '[' + v.map(canonical).join(',') + ']';
+        if (v && typeof v === 'object') return '{' + Object.keys(v).filter(k => v[k] !== undefined).sort().map(k => JSON.stringify(k) + ':' + canonical(v[k])).join(',') + '}';
+        return JSON.stringify(v);
+      };
+      const bytes = new TextEncoder().encode(canonical([...gangs].sort((a,b) => a.id! < b.id! ? -1 : a.id! > b.id! ? 1 : 0)));
+      const snapshot = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))).map(b => b.toString(16).padStart(2, '0')).join('');
 
+      const contextStillCurrent = () => gisContextGuard.current.caseProjectId === contextId
+        && gisContextGuard.current.propProjectId === projectId && gisContextGuard.current.activeProjectId === activeProject?.id;
+      if (!contextStillCurrent()) throw new Error("El contexto cambió durante la preparación. Vuelva a solicitar el análisis.");
       const response = await fetch("/api/pandillas/analyze-gis", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "If-Match": `"${snapshot}"`,
         },
         body: JSON.stringify(payload),
       });
@@ -1577,6 +1593,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
       }
 
       const data = await response.json();
+      if (!contextStillCurrent()) throw new Error("El contexto cambió durante el análisis. El resultado no se incorporó a la vista actual.");
       setGisAnalysisReport(data.report);
       setGisStructuredOutput(data.structuredOutput);
     } catch (err: any) {
