@@ -34,12 +34,4 @@
 .legend { margin: 0; font-size: 10px; line-height: 14px; color: #475569; border-top: 1px solid #cbd5e1; padding-top: 5px; }
 .notice { padding: 5px 12px; font-size: 11px; color: #e2e8f0; }
 .notice p { margin: 2px; color: #fecaca; }
-@media print {
-  :global(body).printMode > :not([data-gang-print-root]) { display: none !important; }
-  :global(body).printMode { margin: 0 !important; background: white !important; }
-  .overlay, .modal, .viewport, .stage, .document { display: block; position: static; width: auto !important; height: auto !important; overflow: visible; padding: 0; margin: 0; border: 0; border-radius: 0; background: white; transform: none !important; }
-  .toolbar, .navigation, .notice { display: none !important; }
-  .page { position: relative; visibility: visible; margin: 0; box-shadow: none; break-after: page; page-break-after: always; }
-  .page:last-child { break-after: auto; page-break-after: auto; }
-  .page, .card, .badge, .root { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-}
+.pdfPage { position: relative; top: auto; left: auto; visibility: visible; transform: none; box-shadow: none; }

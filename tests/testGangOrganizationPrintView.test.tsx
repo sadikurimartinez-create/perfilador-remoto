@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 jest.mock('../src/modules/pandillas/components/GangOrganizationPrintView.module.css', () => ({ __esModule: true, default: new Proxy({}, { get: (_, key) => String(key) }) }));
-import { GangOrganizationPages, createGangOrganizationSnapshot, organizationPages, getGangRoleVisualStyle, GANG_ROLE_OPTIONS, waitForPrintableImages, printGangOrganization, getOrganizationLayout, getOrganizationPreviewScale, organizationPageIndex, ORGANIZATION_LAYOUT_POLICY } from '../src/modules/pandillas/components/GangOrganizationPrintView';
+import { GangOrganizationPages, createGangOrganizationSnapshot, organizationPages, getGangRoleVisualStyle, GANG_ROLE_OPTIONS, waitForPrintableImages, organizationPdfFilename, getOrganizationLayout, getOrganizationPreviewScale, organizationPageIndex, ORGANIZATION_LAYOUT_POLICY } from '../src/modules/pandillas/components/GangOrganizationPrintView';
 import type { GangMember } from '../src/modules/pandillas/pandillas.mapper';
 const member = (status?: GangMember['estatusPandilla']): GangMember => ({ nombre: 'Nombre documental', alias: 'Alias documental', rol: '', estatusPandilla: status });
 const snapshot = (members = [member()]) => createGangOrganizationSnapshot('Pandilla documental', members, ['https://example.test/primary.jpg'], '07/10/2026');
@@ -42,26 +42,10 @@ test('imagen bloqueada impide imprimir indefinidamente', async () => {
   } finally { jest.useRealTimers(); }
 });
 
-test.each(['success', 'cancel', 'error'] as const)('print mode restores body after %s', outcome => {
-  const classes = new Set(['existing-class']);
-  const body = { classList: { add: (name: string) => classes.add(name), remove: (name: string) => classes.delete(name) } } as unknown as HTMLElement;
-  const events = new EventTarget();
-  const printer = Object.assign(events, { print: jest.fn(() => {
-    expect(classes.has('printMode')).toBe(true);
-    if (outcome === 'error') throw new Error('PRINT_FAILED');
-    events.dispatchEvent(new Event('afterprint'));
-    expect(classes.has('printMode')).toBe(false);
-  }) });
-  if (outcome === 'error') expect(() => printGangOrganization(body, printer)).toThrow('PRINT_FAILED');
-  else { printGangOrganization(body, printer); printGangOrganization(body, printer); expect(printer.print).toHaveBeenCalledTimes(2); }
-  expect([...classes]).toEqual(['existing-class']);
-});
-test('print mode restores body even without afterprint', () => {
-  const classes = new Set<string>();
-  const body = { classList: { add: (name: string) => classes.add(name), remove: (name: string) => classes.delete(name) } } as unknown as HTMLElement;
-  const printer = Object.assign(new EventTarget(), { print: () => expect(classes.has('printMode')).toBe(true) });
-  printGangOrganization(body, printer);
-  expect(classes.size).toBe(0);
+test('PDF filename is descriptive and cannot inject paths or reserved characters', () => {
+  const name = organizationPdfFilename('../../Los Género 14:<x>', new Date('2026-10-07T12:00:00Z'));
+  expect(name).toBe('organigrama-Los-Genero-14-x-2026-10-07T12-00-00-000Z.pdf');
+  expect(name).not.toMatch(/[\\/:<>|?*]/);
 });
 test('six members including documented leadership fit a single page', () => {
   const s = snapshot([member('Líder'), member('Segundo al mando'), member('Sicario'), member('Chofer'), member('Halcón'), member()]);
@@ -127,7 +111,7 @@ test('multipage navigation is bounded and can return to first page', () => {
   expect(organizationPageIndex(2, -1, 3)).toBe(1);
 });
 
-test('Chrome: complete preview, navigation, zoom, close, consecutive print and physical PDF pagination', async () => {
+test('Chrome: complete preview, navigation, zoom, close, consecutive direct downloads and real PDF pagination', async () => {
   async function runBrowser(roles: readonly string[]) {
     const assert = require('node:assert/strict');
     const expect = (value: any) => ({ toBe: (expected: any) => assert.equal(value, expected), toContain: (expected: string) => assert.ok(value.includes(expected)), toBeNull: () => assert.equal(value, null) });
@@ -145,25 +129,39 @@ test('Chrome: complete preview, navigation, zoom, close, consecutive print and p
     const page = await browser.newPage();
     await page.setViewport({ width: 1400, height: 1000 });
     for (const count of [1, 6, 9, 12, 25, 8]) {
+      await page.goto('about:blank');
       await page.emulateMediaType('screen');
       await page.setContent(`<style>${css}</style><main id="app-around">GENERAL APPLICATION</main><div id="fixture"></div>`);
       await page.addScriptTag({ path: path.join(path.dirname(require.resolve('react')), 'umd/react.development.js') });
       await page.addScriptTag({ path: path.join(path.dirname(require.resolve('react-dom')), 'umd/react-dom.development.js') });
+      await page.addScriptTag({ path: require.resolve('html2canvas') });
+      await page.addScriptTag({ path: path.join(path.dirname(require.resolve('jspdf')), 'jspdf.umd.min.js') });
       await page.addScriptTag({ content: `var module = { exports: {} }; var exports = module.exports;
         function require(name) {
           if (name === 'react') return React;
           if (name === 'react-dom') return ReactDOM;
           if (name.endsWith('.css')) return { __esModule: true, default: new Proxy({}, {get: (_, key) => String(key)}) };
           if (name.includes('CEIPOLButton')) return { CEIPOLButton: ({ children, loading, variant, ...props }) => React.createElement('button', {...props, disabled: props.disabled || loading}, children) };
+          if (name === 'html2canvas') return { __esModule: true, default: window.html2canvas };
+          if (name === 'jspdf') return window.jspdf;
           if (name.includes('dossierPhotoDisplay')) return { dossierPhotoSource: (primary, legacy, failed) => [primary, legacy].find(url => url && !failed.includes(url)) };
           throw new Error('UNEXPECTED_TEST_IMPORT');
         }
         ${compiled}
         window.fixtureExports = module.exports;` });
+      const cdp = await page.createCDPSession();
+      await cdp.send('Page.setDownloadBehavior', { behavior: 'deny' });
       const members = Array.from({ length: count }, (_, i) => ({ nombre: `Integrante documental ${i + 1}` + (count === 8 ? ' Nombre largo'.repeat(15) : ''), alias: `Alias ${i + 1}` + (count === 8 ? ' Alias documental'.repeat(10) : ''), estatusPandilla: roles[i % roles.length], edad: 25, rol: count === 8 ? 'Función documental '.repeat(8) : '' }));
-      const portrait = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="100"><rect width="80" height="100" fill="#e2e8f0"/><circle cx="40" cy="30" r="18" fill="#64748b"/><path d="M10 100V80a30 30 0 0160 0v20" fill="#64748b"/></svg>');
-      await page.evaluate(`window.fixtureClosed=false; window.fixturePrintCalls=0;
-        window.print = () => { if (!document.body.classList.contains('printMode')) throw new Error('MISSING_PRINT_MODE'); window.fixturePrintCalls++; window.dispatchEvent(new Event('afterprint')); };
+      const portrait = await page.evaluate(() => {
+        const canvas = document.createElement('canvas'); canvas.width = 80; canvas.height = 100;
+        const ctx = canvas.getContext('2d')!; ctx.fillStyle = '#e2e8f0'; ctx.fillRect(0, 0, 80, 100);
+        ctx.fillStyle = '#64748b'; ctx.beginPath(); ctx.arc(40, 30, 18, 0, Math.PI * 2); ctx.fill(); ctx.fillRect(10, 60, 60, 40);
+        return canvas.toDataURL('image/png');
+      });
+      await page.evaluate(`window.fixtureClosed=false; window.fixturePdfs=[]; window.fixtureNames=[];
+        window.print = () => { throw new Error('PRINT_MUST_NOT_BE_USED'); };
+        const createUrl = URL.createObjectURL.bind(URL); URL.createObjectURL = blob => { if (blob.type === 'application/pdf') window.fixturePdfs.push(blob); return createUrl(blob); };
+        const dispatch = EventTarget.prototype.dispatchEvent; EventTarget.prototype.dispatchEvent = function(event) { if (this instanceof HTMLAnchorElement && this.download) window.fixtureNames.push(this.download); return dispatch.call(this, event); };
         window.fixtureRoot = ReactDOM.createRoot(document.getElementById('fixture'));
         window.fixtureRoot.render(React.createElement(window.fixtureExports.GangOrganizationPrintView, {snapshot: window.fixtureExports.createGangOrganizationSnapshot('Pandilla ficticia', ${JSON.stringify(members)}, ${JSON.stringify(members.map(() => portrait))}, '07/10/2026'), onClose: () => { window.fixtureClosed=true; window.fixtureRoot.unmount(); }}));`);
       await page.waitForSelector('.page[data-active="true"]');
@@ -201,20 +199,34 @@ test('Chrome: complete preview, navigation, zoom, close, consecutive print and p
         expect(await page.evaluate(() => document.querySelector('.page[data-active="true"] .metadata')!.textContent)).toContain('Página 2 de 3');
         await click('← Página anterior');
       }
-      await click('IMPRIMIR / GUARDAR PDF');
-      await page.waitForFunction('window.fixturePrintCalls === 1');
-      await click('IMPRIMIR / GUARDAR PDF');
-      await page.waitForFunction('window.fixturePrintCalls === 2');
-      expect(await page.evaluate(() => document.body.classList.contains('printMode'))).toBe(false);
-      await page.evaluate(() => document.body.classList.add('printMode'));
-      await page.emulateMediaType('print');
-      expect(await page.evaluate(() => getComputedStyle(document.getElementById('app-around')!).display)).toBe('none');
-      const pdf = Buffer.from(await page.pdf({ format: 'Letter', landscape: true, margin: { top: '6mm', right: '6mm', bottom: '6mm', left: '6mm' }, printBackground: true }));
+      expect(await page.evaluate(() => Array.from(document.querySelectorAll('button')).some(b => /IMPRIMIR/.test(b.textContent || '')))).toBe(false);
+      await click('DESCARGAR ORGANIGRAMA');
+      await page.waitForFunction('window.fixturePdfs.length === 1 && window.fixtureNames.length === 1 || document.querySelector("[role=alert]")');
+      const alert = await page.evaluate(() => document.querySelector('[role=alert]')?.textContent);
+      if (alert) {
+        await page.evaluate('window.fixtureExports.downloadOrganizationPdf(document.querySelector(".document"), "Diagnostic fixture")');
+        throw new Error(String(alert));
+      }
+      await click('DESCARGAR ORGANIGRAMA');
+      await page.waitForFunction('window.fixturePdfs.length === 2 && window.fixtureNames.length === 2');
+      expect(await page.$('[data-organization-pdf-scratch]')).toBeNull();
+      const filename = await page.evaluate('window.fixtureNames[0]');
+      expect(filename.startsWith('organigrama-Pandilla-ficticia-')).toBe(true);
+      const bytes = await page.evaluate('window.fixturePdfs[0].arrayBuffer().then(buffer => Array.from(new Uint8Array(buffer)))');
+      const pdf = Buffer.from(bytes as number[]);
+      expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
       const pageCount = (pdf.toString('latin1').match(/\/Type\s*\/Page\b/g) || []).length;
-            const expectedPages = count === 8 ? await page.evaluate(`window.fixtureExports.organizationPages(window.fixtureExports.createGangOrganizationSnapshot('Gang', ${JSON.stringify(members)}, [])).length`) : count === 25 ? 3 : 1;
+      const expectedPages = count === 8 ? await page.evaluate(`window.fixtureExports.organizationPages(window.fixtureExports.createGangOrganizationSnapshot('Gang', ${JSON.stringify(members)}, [])).length`) : count === 25 ? 3 : 1;
       expect(pageCount).toBe(expectedPages);
-      await page.emulateMediaType('screen');
-      await page.evaluate(() => document.body.classList.remove('printMode'));
+      expect(pdf.toString('latin1').includes('/Subtype /Image')).toBe(true);
+      if (process.env.ORGANIZATION_PDF_QA_DIR && [6, 12, 25].includes(count)) fs.writeFileSync(path.join(process.env.ORGANIZATION_PDF_QA_DIR, `organigrama-fixture-${count}.pdf`), pdf);
+      if (count === 1) {
+        await page.evaluate('window.fetch = () => Promise.reject(new Error("SIMULATED_PHOTO_FETCH_FAILURE"))');
+        await click('DESCARGAR ORGANIGRAMA');
+        await page.waitForSelector('[role=alert]');
+        expect(await page.evaluate('window.fixturePdfs.length')).toBe(2);
+        expect(await page.$('[data-organization-pdf-scratch]')).toBeNull();
+      }
       await click('CERRAR');
       expect(await page.evaluate('window.fixtureClosed')).toBe(true);
       expect(await page.$('[data-gang-print-root]')).toBeNull();
@@ -231,4 +243,4 @@ test('Chrome: complete preview, navigation, zoom, close, consecutive print and p
     child.on('error', reject);
     child.on('exit', (code: number) => code === 0 ? resolve() : reject(new Error(output || `BROWSER_TEST_EXIT_${code}`)));
   });
-}, 90000);
+}, 180000);

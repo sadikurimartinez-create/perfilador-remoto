@@ -115,15 +115,66 @@ export async function waitForPrintableImages(root: HTMLElement) {
     if (img.complete) done();
   })));
 }
-export function printGangOrganization(body: HTMLElement, printer: Pick<Window, 'print' | 'addEventListener' | 'removeEventListener'>) {
-  const cleanup = () => body.classList.remove(styles.printMode);
-  printer.addEventListener('afterprint', cleanup);
-  body.classList.add(styles.printMode);
+export function organizationPdfFilename(gangName: string, date = new Date()) {
+  const name = gangName.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'pandilla';
+  return `organigrama-${name}-${date.toISOString().replace(/[:.]/g, '-')}.pdf`;
+}
+
+/** Read-only local artifact. Capture one existing page at a time, independently of preview zoom. */
+export async function downloadOrganizationPdf(root: HTMLElement, gangName: string, isActive = () => true) {
+  const [{ default: capture }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')]);
+  const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter', compress: true });
+  const host = document.createElement('div');
+  host.setAttribute('aria-hidden', 'true');
+  host.setAttribute('data-organization-pdf-scratch', '');
+  Object.assign(host.style, { position: 'fixed', left: '0', top: '0', zIndex: '-1', pointerEvents: 'none' });
+  document.body.appendChild(host);
   try {
-    printer.print();
+    const pages = Array.from(root.querySelectorAll<HTMLElement>(`section.${styles.page}`));
+    if (!pages.length) throw new Error('PDF_EMPTY');
+    for (const [index, source] of pages.entries()) {
+      if (!isActive()) throw new Error('PDF_CANCELLED');
+      const page = source.cloneNode(true) as HTMLElement;
+      page.classList.add(styles.pdfPage);
+      host.replaceChildren(page);
+      const sourceImages = Array.from(source.querySelectorAll('img'));
+      const images = Array.from(page.querySelectorAll('img'));
+      // Reuse only the already resolved/displayed source, without introducing any proxy or new permissions.
+      for (const [imageIndex, image] of images.entries()) {
+        const original = sourceImages[imageIndex];
+        if (!original.complete || !original.naturalWidth) throw new Error('PDF_IMAGE_UNAVAILABLE');
+        const url = original.currentSrc || original.src;
+        const response = await fetch(url, { cache: 'no-store', credentials: new URL(url, location.href).origin === location.origin ? 'same-origin' : 'omit', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(20000) })
+          .catch(() => { throw new Error('PDF_IMAGE_UNAVAILABLE'); });
+        if (!response.ok) throw new Error('PDF_IMAGE_UNAVAILABLE');
+        const blob = await response.blob();
+        if (!/^image\/(png|jpeg|webp)$/.test(blob.type) || !blob.size || blob.size > 10 * 1024 * 1024) throw new Error('PDF_IMAGE_UNAVAILABLE');
+        image.src = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result));
+          reader.onerror = () => reject(new Error('PDF_IMAGE_UNAVAILABLE'));
+          reader.readAsDataURL(blob);
+        });
+        await image.decode();
+        // html2canvas does not implement object-fit; encode the existing contain geometry explicitly.
+        const frame = image.parentElement!;
+        const ratio = Math.min(frame.clientWidth / image.naturalWidth, frame.clientHeight / image.naturalHeight);
+        image.style.width = `${image.naturalWidth * ratio}px`;
+        image.style.height = `${image.naturalHeight * ratio}px`;
+      }
+      const overflow = [page, ...Array.from(page.querySelectorAll<HTMLElement>('article'))].some(element => element.scrollHeight > element.clientHeight + 1 || element.scrollWidth > element.clientWidth + 1);
+      if (overflow) throw new Error('PDF_TEXT_OVERFLOW');
+      if (!isActive()) throw new Error('PDF_CANCELLED');
+      const canvas = await capture(page, { scale: 2, backgroundColor: '#ffffff', logging: false, allowTaint: false, useCORS: false, scrollX: 0, scrollY: 0, width: Math.ceil(ORGANIZATION_LAYOUT_POLICY.width), height: Math.ceil(ORGANIZATION_LAYOUT_POLICY.height) });
+      try {
+        if (index > 0) pdf.addPage('letter', 'landscape');
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 6, 6, 267.4, 203.9);
+      } finally { canvas.width = 0; canvas.height = 0; }
+    }
+    if (!isActive()) throw new Error('PDF_CANCELLED');
+    await pdf.save(organizationPdfFilename(gangName), { returnPromise: true });
   } finally {
-    cleanup();
-    printer.removeEventListener('afterprint', cleanup);
+    host.remove();
   }
 }
 
@@ -149,7 +200,7 @@ export function GangOrganizationPrintView({ snapshot, onClose }: { snapshot: Gan
   }, []);
   useEffect(() => { setActivePage(0); setZoom(1); }, [snapshot]);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  const print = async () => {
+  const download = async () => {
     setBusy(true); setError('');
     try {
       if (document.fonts) await document.fonts.ready;
@@ -159,23 +210,21 @@ export function GangOrganizationPrintView({ snapshot, onClose }: { snapshot: Gan
         await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
       }
       if (alive.current && root.current) {
-        // Physical print dimensions never depend on preview zoom. Refuse clipping of exceptional text.
-        const overflowing = Array.from(root.current.querySelectorAll<HTMLElement>('article')).some(card => card.scrollHeight > card.clientHeight + 1);
-        if (overflowing) throw new Error('PRINT_TEXT_OVERFLOW');
-        printGangOrganization(document.body, window);
+        await downloadOrganizationPdf(root.current, snapshot.gangName, () => alive.current);
       }
     } catch (failure) {
-      if (alive.current) setError(failure instanceof Error && failure.message === 'PRINT_TEXT_OVERFLOW'
-        ? 'Un campo documental excede el área legible de carta horizontal. No se imprimió para evitar recortarlo.'
-        : 'No se pudo preparar la impresión. Intente nuevamente.');
+      if (alive.current) setError(failure instanceof Error && failure.message === 'PDF_TEXT_OVERFLOW'
+        ? 'Un campo documental excede el área legible de carta horizontal. No se generó el PDF para evitar recortarlo.'
+        : failure instanceof Error && failure.message === 'PDF_IMAGE_UNAVAILABLE'
+          ? 'No se pudo incorporar una fotografía al PDF. Actualice el organigrama e intente nuevamente.'
+          : 'No se pudo generar el PDF del organigrama. Intente nuevamente.');
     }
     finally { if (alive.current) setBusy(false); }
   };
   return createPortal(<div data-gang-print-root className={styles.overlay} role="dialog" aria-modal="true" aria-label="Organigrama de la pandilla">
-    <style>{'@media print { @page { size: letter landscape; margin: 6mm; } }'}</style>
     <div className={styles.modal}>
       <div className={styles.toolbar}><strong>ORGANIGRAMA — {snapshot.gangName}</strong>
-        <CEIPOLButton loading={busy} onClick={() => void print()}>IMPRIMIR / GUARDAR PDF</CEIPOLButton>
+        <CEIPOLButton loading={busy} onClick={() => void download()}>DESCARGAR ORGANIGRAMA</CEIPOLButton>
         <CEIPOLButton variant="secondary" onClick={() => setZoom(1)}>AJUSTAR</CEIPOLButton>
         <CEIPOLButton variant="secondary" aria-label="Reducir zoom" onClick={() => setZoom(value => Math.max(.5, value - .1))}>−</CEIPOLButton>
         <CEIPOLButton variant="secondary" aria-label="Aumentar zoom" onClick={() => setZoom(value => Math.min(2, value + .1))}>+</CEIPOLButton>
@@ -189,7 +238,7 @@ export function GangOrganizationPrintView({ snapshot, onClose }: { snapshot: Gan
       <div className={styles.viewport} ref={viewport}><div className={styles.stage} style={{ width: ORGANIZATION_LAYOUT_POLICY.width * scale, height: ORGANIZATION_LAYOUT_POLICY.height * scale }}>
         <div className={styles.document} ref={root} style={{ transform: `scale(${scale})` }}><GangOrganizationPages snapshot={snapshot} activePage={activePage} /></div>
       </div></div>
-      <div className={styles.notice}>{error && <p role="alert">{error}</p>}Chrome → Más ajustes → desactivar Encabezados y pies de página.</div>
+      <div className={styles.notice}>{error && <p role="alert">{error}</p>}PDF carta horizontal · Descarga directa · Consulta documental</div>
     </div>
   </div>, document.body);
 }
