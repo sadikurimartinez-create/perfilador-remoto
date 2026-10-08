@@ -1,3 +1,4 @@
+import { prepareDenueAcquisitionPois } from "@/utils/denueCanonicalPoi";
 jest.mock("@/lib/osintActions", () => ({
   getScinceData: jest.fn(async () => ({
     exito: true,
@@ -17,6 +18,7 @@ jest.mock("@/lib/osintActions", () => ({
   getDenueData: jest.fn(async () => ({
     exito: true,
     total: 1,
+    pois: prepareDenueAcquisitionPois([{ Id: "fixture-1", Nombre: "Comercio ficticio", Clase_actividad: "Comercio", Latitud: 21.88, Longitud: -102.29 }], { query: "21.88,-102.29,350", acquiredAt: "2026-01-01T00:00:00Z" }),
     resumen: "Negocio real",
     epistemicIntegrity: {
       sourceId: "inegi-denue-api",

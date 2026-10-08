@@ -24,7 +24,7 @@ export class PandillasEngine {
   static async executeFullSweep(
     gang: GangEntity,
     userContext: string
-  ): Promise<FusionResult & { scinceInfo?: any; denueInfo?: any; externalSourceProvenance?: EpistemicIntegrityMetadata[]; sourceRouteClassifications?: SourceRouteDescriptor[]; sourceOrchestrationItems?: MultisourceOrchestrationItem[]; isAiGenerated: boolean; warning?: string }> {
+  ): Promise<FusionResult & { scinceInfo?: any; denueInfo?: any; denueObservationDiagnostics?: Array<{ index: number; reason: string }>; externalSourceProvenance?: EpistemicIntegrityMetadata[]; sourceRouteClassifications?: SourceRouteDescriptor[]; sourceOrchestrationItems?: MultisourceOrchestrationItem[]; isAiGenerated: boolean; warning?: string }> {
     const geoValidation = validateGeoIntegrity(gang.coordenadas?.lat, gang.coordenadas?.lng);
     const lat = geoValidation.latitude;
     const lng = geoValidation.longitude;
@@ -84,12 +84,55 @@ export class PandillasEngine {
     const scinceRoute = classifyEpistemicSource(scinceData?.epistemicIntegrity);
     const denueRoute = classifyEpistemicSource(denueData?.epistemicIntegrity);
     const telegramRoute = classifyEpistemicSource(telegramOsint?.epistemicIntegrity);
-    const denueScinceOrchestrationItems = [scinceData, denueData]
+    const denueScinceOrchestrationItems = [scinceData]
       .map((item) => adaptDenueScinceSource({
         expedienteId: gang.projectId,
         integrity: item?.epistemicIntegrity,
       }))
       .filter((item): item is MultisourceOrchestrationItem => item !== null);
+
+    // Acquired DENUE items are observations, not the aggregate query descriptor.
+    // Keep the provider's canonical identity and provenance; never fabricate an ID.
+    const denueObservationDiagnostics: Array<{ index: number; reason: string }> = [];
+    const denuePois: any[] = [];
+    if (denueData?.epistemicIntegrity?.acquisitionStatus === "ACQUIRED") {
+      const pois = Array.isArray(denueData.pois) ? denueData.pois : [];
+      if (!pois.length) denueObservationDiagnostics.push({ index: -1, reason: "DENUE_OBSERVATIONS_UNAVAILABLE" });
+      const identityCounts = new Map<string, number>();
+      for (const poi of pois) {
+        if (typeof poi?.sourceEvidenceId === "string") identityCounts.set(poi.sourceEvidenceId, (identityCounts.get(poi.sourceEvidenceId) || 0) + 1);
+      }
+      pois.forEach((poi: any, index: number) => {
+        const identity = poi?.sourceEvidenceId;
+        const integrity = poi?.epistemicIntegrity;
+        let reason: string | undefined;
+        const originalId = poi?.Id ?? poi?.DENUE_ID ?? poi?.denueId ?? poi?.CLEE ?? poi?.clee ?? poi?.Clee ?? poi?.id;
+        if (typeof identity !== "string" || !/^denue:(?!(?:invalid|derived):)[a-zA-Z0-9_.:-]+$/.test(identity)
+          || (originalId !== undefined && !/^[a-zA-Z0-9_.:-]+$/.test(String(originalId)))) reason = "DENUE_OBSERVATION_IDENTITY_UNAVAILABLE";
+        else if (originalId !== undefined && identity !== `denue:${originalId}` && identity !== originalId) reason = "DENUE_OBSERVATION_IDENTITY_MISMATCH";
+        else if ((identityCounts.get(identity) || 0) > 1) reason = "DENUE_DUPLICATE_OBSERVATION_IDENTITY";
+        else if (poi.provider !== "INEGI_DENUE" || poi.source !== "DENUE"
+          || integrity?.sourceId !== "inegi-denue-api" || integrity?.providerId !== "INEGI_DENUE"
+          || integrity?.sourceType !== "DENUE" || integrity?.acquisitionMode !== "OBSERVED"
+          || integrity?.acquisitionStatus !== "ACQUIRED" || integrity?.isSimulated !== false
+          || typeof integrity?.acquiredAt !== "string" || !Number.isFinite(Date.parse(integrity.acquiredAt))
+          || !integrity?.sourceReference || !integrity?.rawSourceReference
+          || poi.sourceReference !== integrity.sourceReference || poi.rawSourceReference !== integrity.rawSourceReference
+          || !poi.traceabilityId || poi.traceabilityId !== integrity.traceabilityId
+          || integrity.query !== `${lat},${lng},350`) reason = "DENUE_OBSERVATION_PROVENANCE_UNAVAILABLE";
+        else if (validateGeoIntegrity(poi.lat, poi.lng).latitude === null) reason = "DENUE_OBSERVATION_COORDINATES_INVALID";
+        if (reason) { denueObservationDiagnostics.push({ index, reason }); return; }
+        const item = adaptDenueScinceSource({ expedienteId: gang.projectId, observationReference: identity, integrity });
+        if (item?.eligibility !== "ELIGIBLE") {
+          denueObservationDiagnostics.push({ index, reason: "DENUE_OBSERVATION_NOT_ELIGIBLE" }); return;
+        }
+        denueScinceOrchestrationItems.push(item);
+        denuePois.push(poi);
+      });
+    } else {
+      const descriptor = adaptDenueScinceSource({ expedienteId: gang.projectId, integrity: denueData?.epistemicIntegrity });
+      if (descriptor) denueScinceOrchestrationItems.push(descriptor);
+    }
 
     const telegramOrchestrationItem = adaptOsintSource({
       expedienteId: gang.projectId,
@@ -110,8 +153,8 @@ export class PandillasEngine {
         : "Sin datos demográficos."
     }
 * Comercios Locales Activos (DENUE / ${denueRoute?.operationalMode || "UNKNOWN"}): ${
-      denueRoute?.authoritative && denueData.exito && denueData.total > 0
-        ? `Total comercios en radio: ${denueData.total}. Muestra de negocios: ${denueData.resumen}`
+      denueRoute?.authoritative && denueData.exito && denuePois.length > 0
+        ? `Observaciones DENUE incorporables: ${denuePois.length}. Muestra de negocios: ${denuePois.slice(0, 8).map(poi => `${poi.Nombre || ""} (${poi.Clase_actividad || ""})`).join(" | ")}`
         : "Sin adquisición DENUE autoritativa disponible."
     }
 * Análisis OSINT Complementario (${telegramRoute?.sourceType || "TELEGRAM_CONTEXT"} / ${telegramRoute?.operationalMode || "UNKNOWN"}): ${
@@ -130,7 +173,8 @@ export class PandillasEngine {
     return {
       ...result,
       scinceInfo: scinceData.exito ? scinceData : undefined,
-      denueInfo: denueData.exito ? denueData : undefined,
+      denueInfo: denueData.exito ? { ...denueData, pois: denuePois, total: denuePois.length, resumen: denuePois.slice(0, 8).map(poi => `${poi.Nombre || ""} (${poi.Clase_actividad || ""})`).join(" | ") } : undefined,
+      denueObservationDiagnostics,
       externalSourceProvenance,
       sourceRouteClassifications,
       sourceOrchestrationItems,
